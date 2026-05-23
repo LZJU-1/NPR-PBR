@@ -250,28 +250,33 @@ Shader "Unlit/Face"
                 float3 rightVec = _RightVector;
 
                 float3 upVector = cross(forwardVec, rightVec);
-                float3 LpU = dot(L, upVector)/pow(length(upVector), 2) * upVector;
+                float sqrUpLen = dot(upVector, upVector);
+                float3 LpU = sqrUpLen > 1e-12 ? dot(L, upVector) / sqrUpLen * upVector : 0;
                 float3 LpHead = L - LpU;
 
-                float pi = 3.1415926;
-                float value = acos(dot(normalize(LpHead), normalize(rightVec))) / pi;
+                float sdf = 1; // default lit
+                float LpHeadLen = length(LpHead);
+                if (LpHeadLen > 1e-5)
+                {
+                    float3 LpHeadDir = LpHead / LpHeadLen;
+                    float cosAngle = dot(LpHeadDir, normalize(rightVec));
+                    cosAngle = clamp(cosAngle, -1.0, 1.0);
+                    float value = acos(cosAngle) / 3.1415926;
 
-                float exposRight = step(value, 0.5);
+                    float exposRight = step(value, 0.5);
 
-                float valueR = pow(1 - value * 2, 3);
-                float valueL = pow(value * 2 - 1, 3);
+                    float valueR = pow(saturate(1 - value * 2), 3);
+                    float valueL = pow(saturate(value * 2 - 1), 3);
 
-                float mixValue = lerp(valueL, valueR, exposRight);
+                    float mixValue = lerp(valueL, valueR, exposRight);
 
-                // 35:08
+                    float sdfRembrandLeft  = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, float2(1 - i.uv.x, i.uv.y)).r;
+                    float sdfRembrandRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, i.uv).r;
+                    float mixSdf = lerp(sdfRembrandRight, sdfRembrandLeft, exposRight);
 
-                float sdfRembrandLeft = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, float2(1 - i.uv.x, i.uv.y)).r;
-                float sdfRembrandRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, i.uv).r;
-                float mixSdf = lerp(sdfRembrandRight, sdfRembrandLeft, exposRight);
-
-                float sdf = step(mixValue, mixSdf);
-
-                sdf = lerp(0, sdf, step(0, dot(normalize(LpHead), normalize(forwardVec))));
+                    float sdfRaw = step(mixValue, mixSdf);
+                    sdf = lerp(1, sdfRaw, step(0, dot(LpHeadDir, normalize(forwardVec))));
+                }
                 
                 
 
