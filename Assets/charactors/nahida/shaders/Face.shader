@@ -308,7 +308,9 @@ Shader "Unlit/Face"
                     float sdfRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, input.uv).r;
                     float mixSdf   = lerp(sdfRight, sdfLeft, exposRight);
 
-                    float sdfRaw = step(mixValue, mixSdf);
+                    // SDF R 通道: 高值=亮区(鼻梁), 低值=暗区(眼窝)
+                    // step(mixSdf, mixValue): mixSdf高的区域→1(亮), 低的区域→0(暗)
+                    float sdfRaw = step(mixSdf, mixValue);
 
                     // 光源在头部后方时强制全亮
                     sdf = lerp(1.0, sdfRaw,
