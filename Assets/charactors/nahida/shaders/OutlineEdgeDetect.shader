@@ -1,4 +1,4 @@
-Shader "Hidden/OutlineEdgeDetect"
+Shader "NPR/OutlineEdgeDetect"
 {
     // 屏幕空间边缘检测描边 — 使用 Depth + Normal 纹理做 Sobel 滤波
     // 由 OutlineRendererFeature.cs 驱动，在全屏四边形上执行
