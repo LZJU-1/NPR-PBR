@@ -30,9 +30,13 @@ Shader "Unlit/Face"
         _RampTex ("Ramp Tex", 2D) = "white" {}
         _RampRow ("Ramp Row", Range(1, 5)) = 5
 
-        // _SDF: 存储脸部每个像素的阴影阈值（R 通道 0~1）
+        // _SDF: SDF 阴影阈值贴图（R 通道），决定阴影形状
+        // _ShadowTex: 阴影调制贴图（与 _SDF 同一张 FaceLightmap.png）
+        //   G 通道 — 阴影强度衰减（脸颊、眼窝等处减淡阴影）
+        //   A 通道 — 强制高亮遮罩（鼻梁、额头中心等永不落阴影）
         // 与 NahidaFaceScripts 传入的 _ForwardVector/_RightVector 配合使用
         _SDF ("SDF", 2D) = "black" {}
+        _ShadowTex ("Shadow Tex", 2D) = "black" {}
         _ForwardVector ("Forward Vector", Vector) = (0, 0, 1, 0)
         _RightVector   ("Right Vector",   Vector) = (1, 0, 0, 0)
 
@@ -165,6 +169,7 @@ Shader "Unlit/Face"
             TEXTURE2D(_SphereTex);  SAMPLER(sampler_SphereTex);
             TEXTURE2D(_RampTex);    SAMPLER(sampler_RampTex);
             TEXTURE2D(_SDF);        SAMPLER(sampler_SDF);
+            TEXTURE2D(_ShadowTex);  SAMPLER(sampler_ShadowTex);
 
             // ------------------------------------------------------------
             // 顶点着色器
@@ -296,23 +301,24 @@ Shader "Unlit/Face"
                     float valueL = pow(saturate(angle01 * 2.0 - 1.0), 3);
                     float mixValue = lerp(valueL, valueR, exposRight);
 
-                    // 根据光源侧别翻转 UV 的 U 方向采样 SDF
-                    float2 uvLeft  = float2(1.0 - input.uv.x, input.uv.y);
-                    float2 uvRight = input.uv;
-                    float4 shadowTex = SAMPLE_TEXTURE2D(_SDF, sampler_SDF,
-                                         lerp(uvRight, uvLeft, exposRight));
+                    // _SDF (FaceLightmap.png R 通道): SDF 阴影阈值
+                    // 根据光源侧别翻转 UV 的 U 方向
+                    float sdfLeft  = SAMPLE_TEXTURE2D(_SDF, sampler_SDF,
+                                        float2(1.0 - input.uv.x, input.uv.y)).r;
+                    float sdfRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, input.uv).r;
+                    float mixSdf   = lerp(sdfRight, sdfLeft, exposRight);
 
-                    // R 通道：SDF 硬切 → 阴影形状
-                    float sdfRaw = step(mixValue, shadowTex.r);
+                    float sdfRaw = step(mixValue, mixSdf);
 
                     // 光源在头部后方时强制全亮
                     sdf = lerp(1.0, sdfRaw,
                                step(0.0, dot(LpHeadDir, normalize(forwardVec))));
 
-                    // G 通道：阴影强度衰减（脸颊等处让阴影更淡）
+                    // _ShadowTex (FaceLightmap.png GA 通道): 阴影调制
+                    // G — 阴影强度衰减，A — 强制高亮遮罩
+                    float4 shadowTex = SAMPLE_TEXTURE2D(_ShadowTex, sampler_ShadowTex,
+                                                        input.uv);
                     sdf *= shadowTex.g;
-
-                    // A 通道：强制高亮区域（鼻梁、额头中心等凸起处）
                     sdf = lerp(sdf, 1.0, shadowTex.a);
                 }
 
