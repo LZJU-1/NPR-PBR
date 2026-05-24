@@ -28,3 +28,18 @@
 - `MetalMap.png`（金属遮罩）
 
 **保留 MipMap 的贴图**：法线贴图（需要 MipMap 抗高光锯齿）、颜色贴图（标准做法）
+
+---
+
+## 2026-05-25
+
+### 完成 Face.shader 脸部渲染管线
+
+从 SDF 调试输出（黑白蒙版）改为完整 NPR 渲染，4 步管线：
+
+1. **基础色** — AmbientColor + DiffuseColor 混合作为底色，叠乘 BaseTex（颜.png）和 ToonTex（toon_defo.bmp MatCap）
+2. **Ramp 阴影色** — 从 Face_Shadow.png 的暗色端采样，_RampRow=5 选脸部行，根据光源 Y 分量做日夜插值
+3. **SDF 阴影蒙版** — FaceLightmap.png（R 通道）存储每像素阴影阈值，与光源方向角度（立方映射）比较，硬切产生阴影形状
+4. **合成** — sdf=1 亮面直接用 baseColor，sdf=0 暗面用 `baseColor × rampColor × ShadowColor`
+
+**使用贴图**：颜.png（漫反射）、Face_Shadow.png（阴影 Ramp）、FaceLightmap.png（SDF 阈值）、toon_defo.bmp（MatCap）
