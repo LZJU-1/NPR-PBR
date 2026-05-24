@@ -45,7 +45,10 @@ Shader "Unlit/Face"
         // ================================================================
         _DoubleSided ("Double Sided", Range(0, 1)) = 0
         _Alpha ("Alpha", Range(0, 1)) = 1
-        _OutlineOffset ("Outline Offset", Float) = 0.000015
+
+        // ---- 描边 ----
+        _OutlineColor  ("Outline Color",  Color) = (0, 0, 0, 1)
+        _OutlineOffset ("Outline Offset", Float) = 0.0003
     }
 
     SubShader
@@ -59,7 +62,54 @@ Shader "Unlit/Face"
         LOD 100
 
         // ================================================================
-        // Pass 0: ShadowCaster — 向 Shadow Map 写入深度
+        // Pass 0: Outline — 背面膨胀描边
+        // ================================================================
+        Pass
+        {
+            Name "Outline"
+            Tags { "LightMode" = "SRPDefaultUnlit" }
+
+            Cull Front
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _OutlineColor;
+                float  _OutlineOffset;
+            CBUFFER_END
+
+            struct Attributes
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            Varyings vert(Attributes v)
+            {
+                Varyings o;
+                float3 offset = v.normal.xyz * _OutlineOffset;
+                o.positionCS = TransformObjectToHClip(v.vertex.xyz + offset);
+                return o;
+            }
+
+            float4 frag(Varyings i) : SV_Target
+            {
+                return _OutlineColor;
+            }
+            ENDHLSL
+        }
+
+        // ================================================================
+        // Pass 1: ShadowCaster — 向 Shadow Map 写入深度
         // ================================================================
         Pass
         {
