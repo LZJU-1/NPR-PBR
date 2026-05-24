@@ -62,54 +62,7 @@ Shader "Unlit/Face"
         LOD 100
 
         // ================================================================
-        // Pass 0: Outline — 背面膨胀描边
-        // ================================================================
-        Pass
-        {
-            Name "Outline"
-            Tags { "LightMode" = "SRPDefaultUnlit" }
-
-            Cull Front
-
-            HLSLPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            CBUFFER_START(UnityPerMaterial)
-                float4 _OutlineColor;
-                float  _OutlineOffset;
-            CBUFFER_END
-
-            struct Attributes
-            {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-            };
-
-            Varyings vert(Attributes v)
-            {
-                Varyings o;
-                float3 offset = v.normal.xyz * _OutlineOffset;
-                o.positionCS = TransformObjectToHClip(v.vertex.xyz + offset);
-                return o;
-            }
-
-            float4 frag(Varyings i) : SV_Target
-            {
-                return _OutlineColor;
-            }
-            ENDHLSL
-        }
-
-        // ================================================================
-        // Pass 1: ShadowCaster — 向 Shadow Map 写入深度
+        // Pass 0: ShadowCaster — 向 Shadow Map 写入深度
         // ================================================================
         Pass
         {
@@ -388,6 +341,95 @@ Shader "Unlit/Face"
                 clip(col.a - 0.5);
                 col.rgb = MixFog(col.rgb, input.fogCoord);
 
+                return col;
+            }
+            ENDHLSL
+        }
+
+        // ================================================================
+        // Pass 3: DrawOutline — 背面膨胀描边
+        //
+        // 原理：
+        //   Cull Front 只渲染模型背面，顶点沿法线方向向外膨胀 _OutlineOffset。
+        //   由于背面比正面略大，在模型边缘处背面会"溢出"形成描边线。
+        //
+        // Pass 组织：
+        //   Shader 内的 Pass 按从上到下的顺序执行。DrawOutline 放在最后
+        //   是因为它渲染背面（Cull Front），而前面的 Pass（ShadowCaster、
+        //   DepthNormals、UniversalForward）都渲染正面。背面的描边不会干扰
+        //   前面的深度/颜色写入，只需 ZWrite 确保描边被主渲染遮挡。
+        //
+        // Tags：
+        //   "RenderPipeline" = "UniversalPipeline" — 声明此 Pass 由 URP 渲染
+        //   "RenderType" = "Opaque"               — 不透明渲染类型
+        //   注意：无 "LightMode" 标签，URP 以默认方式处理此 Pass
+        //
+        // 参数：
+        //   _OutlineColor — 描边颜色（材质 Inspector 中设置）
+        //   _OutlineOffset — 外扩距离（越大描边越粗）
+        // ================================================================
+        Pass
+        {
+            Name "DrawOutline"
+            Tags
+            {
+                "RenderPipeline" = "UniversalPipeline"
+                "RenderType" = "Opaque"
+            }
+
+            // 剔除正面，只渲染背面 → 背面外扩后边缘可见
+            Cull Front
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_fog
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            // 每个 Pass 有独立的 CBUFFER，变量名可以与其它 Pass 重复
+            CBUFFER_START(UnityPerMaterial)
+                float4 _OutlineColor;   // 描边颜色 (RGBA)
+                float  _OutlineOffset;  // 外扩距离
+            CBUFFER_END
+
+            // 顶点输入：只需要位置和法线（描边不需要 UV/切线等）
+            struct Attributes
+            {
+                float4 vertex : POSITION;
+                float2 uv     : TEXCOORD0;
+                float3 normal : NORMAL;
+            };
+
+            // 片元输入：传递裁剪空间位置和雾坐标
+            struct Varyings
+            {
+                float2 uv         : TEXCOORD0;
+                float4 positionCS : SV_POSITION;
+                float  fogCoord   : TEXCOORD1;  // 用于 MixFog 雾效混合
+            };
+
+            Varyings vert(Attributes v)
+            {
+                Varyings o;
+
+                // 顶点沿法线方向外扩：模型空间法线 × 外扩距离
+                float3 offset = v.normal.xyz * _OutlineOffset;
+                VertexPositionInputs posInput = GetVertexPositionInputs(
+                    v.vertex.xyz + offset);
+
+                o.uv         = v.uv;
+                o.positionCS = posInput.positionCS;
+                o.fogCoord   = ComputeFogFactor(posInput.positionCS.z);
+
+                return o;
+            }
+
+            float4 frag(Varyings i, bool isFacing : SV_IsFrontFace) : SV_Target
+            {
+                // 直接输出描边颜色，混合雾效
+                float4 col = _OutlineColor;
+                col.rgb = MixFog(col.rgb, i.fogCoord);
                 return col;
             }
             ENDHLSL

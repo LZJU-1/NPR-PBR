@@ -59,3 +59,41 @@
 **修复**：
 - Face/Body 的 `_ToonTex`：`toon_defo.bmp` → `skin.bmp`
 - Hair 的 `_ToonTex`：`toon_defo.bmp` → `hair.bmp`
+
+---
+
+### 添加 Face.shader 描边 Pass（Cull Front 膨胀法）
+
+**Pass 组织结构**：
+
+```
+SubShader
+├── Pass 0: ShadowCaster     (LightMode="ShadowCaster")     — 向 Shadow Map 写深度
+├── Pass 1: DepthNormals     (LightMode="DepthNormals")     — 供 SSAO 等屏幕特效
+├── Pass 2: UniversalForward (LightMode="UniversalForward") — 主渲染
+└── Pass 3: DrawOutline      (无 LightMode)                 — 背面膨胀描边
+```
+
+每个 Pass 是独立编译的 HLSL 程序，有自己的 CBUFFER、顶点/片元着色器。
+变量名（如 `_OutlineOffset`）在不同 Pass 的 CBUFFER 中可以重复声明，不会冲突。
+
+**DrawOutline Pass 实现步骤**：
+
+1. **Properties** 中声明 `_OutlineColor` (Color) 和 `_OutlineOffset` (Float)
+2. 新建 Pass，Name = "DrawOutline"
+3. Tags 填 `"RenderPipeline"="UniversalPipeline"` `"RenderType"="Opaque"`，**不加 LightMode**
+4. `Cull Front` — 只渲染背面
+5. 顶点着色器：`vertex.xyz + normal.xyz * _OutlineOffset` 沿法线外扩顶点
+6. 片元着色器：直接输出 `_OutlineColor`，混合 `MixFog`
+
+**关键点**：
+- **Cull Front** 是整个技术的核心——利用背面的额外几何产生描边
+- **不加 LightMode** 标签，URP 以默认方式处理（加了反而可能不渲染）
+- 材质中的 `_OutlineColor` alpha 必须为 1，否则描边透明不可见
+- 材质中的 `_OutlineOffset` 会覆盖 Shader 默认值，需在 Inspector 中调整
+
+**踩坑记录**：
+- `_OutlineColor` alpha 初始为 0 → 描边完全透明，看不出效果
+- `_OutlineOffset` 材质旧值 0.000015 覆盖了 Shader 默认 0.0003 → 描边太细
+- 尝试加 `LightMode = "SRPDefaultUnlit"` 导致 Pass 不渲染
+- BodyAndHair 的 ILM 多色描边暂未启用（`sampler2D` 跨 Pass 冲突）
