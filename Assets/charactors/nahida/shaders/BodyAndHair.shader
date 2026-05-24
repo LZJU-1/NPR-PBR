@@ -52,12 +52,7 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
-
-        // ---- 描边（背面膨胀法，顶点色 R 控制粗细）----
-        // _OutlineColor:  描边颜色
-        // _OutlineOffset: 最大外扩距离，实际外扩 = _OutlineOffset × v.color.r
-        _OutlineColor  ("Outline Color",  Color) = (0, 0, 0, 1)
-        _OutlineOffset ("Outline Offset", Float) = 0.001
+        _OutlineOffset ("Outline Offset", Float)      = 0.000015
     }
 
     SubShader
@@ -405,76 +400,6 @@ Shader "Unlit/BodyAndHair"
                 // 雾效混合
                 col.rgb = MixFog(col.rgb, input.fogCoord);
 
-                return col;
-            }
-            ENDHLSL
-        }
-
-        // ================================================================
-        // Pass 3: DrawOutline — 背面膨胀描边（顶点色控制粗细）
-        //
-        // 结构对齐 Face.shader 的 DrawOutline，核心区别：
-        //   外扩量 = _OutlineOffset × v.color.r
-        //   MMD 模型的顶点色 R 通道存储描边粗细（0=无描边，1=满描边）。
-        //   裙摆/衣服内部重叠区域 R=0 → 外扩=0 → 不产生黑色块。
-        //   轮廓边缘 R=1 → 正常描边。
-        // ================================================================
-        Pass
-        {
-            Name "DrawOutline"
-            Tags
-            {
-                "RenderPipeline" = "UniversalPipeline"
-                "RenderType" = "Opaque"
-            }
-
-            Cull Front
-
-            HLSLPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-            #pragma multi_compile_fog
-
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            CBUFFER_START(UnityPerMaterial)
-                float4 _OutlineColor;
-                float  _OutlineOffset;
-            CBUFFER_END
-
-            struct Attributes
-            {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-                float4 color  : COLOR0;     // R 通道 = 描边粗细（MMD 标准）
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-                float  fogCoord   : TEXCOORD0;
-            };
-
-            Varyings vert(Attributes v)
-            {
-                Varyings o;
-
-                // 外扩 = 法线 × _OutlineOffset × 顶点色 R
-                // v.color.r = 0 的区域（内部重叠）不膨胀 → 不产生黑色块
-                float3 offset = v.normal.xyz * _OutlineOffset * v.color.r;
-                VertexPositionInputs posInput = GetVertexPositionInputs(
-                    v.vertex.xyz + offset);
-
-                o.positionCS = posInput.positionCS;
-                o.fogCoord   = ComputeFogFactor(posInput.positionCS.z);
-
-                return o;
-            }
-
-            float4 frag(Varyings i, bool isFacing : SV_IsFrontFace) : SV_Target
-            {
-                float4 col = _OutlineColor;
-                col.rgb = MixFog(col.rgb, i.fogCoord);
                 return col;
             }
             ENDHLSL
