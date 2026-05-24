@@ -46,7 +46,10 @@ Shader "Unlit/Face"
         _DoubleSided ("Double Sided", Range(0, 1)) = 0
         _Alpha ("Alpha", Range(0, 1)) = 1
 
-        // ---- 描边 ----
+        // ---- 描边（背面膨胀法 / Inverted Hull Outline）----
+        // _OutlineColor:  描边颜色，RGBA 的 A 必须 = 1 否则透明不可见
+        // _OutlineOffset: 顶点沿法线外扩距离（模型空间单位），值越大描边越粗
+        //                 对 Nahida 模型（约 1.5m 高）推荐 0.0005~0.002
         _OutlineColor  ("Outline Color",  Color) = (0, 0, 0, 1)
         _OutlineOffset ("Outline Offset", Float) = 0.0003
     }
@@ -347,26 +350,49 @@ Shader "Unlit/Face"
         }
 
         // ================================================================
-        // Pass 3: DrawOutline — 背面膨胀描边
+        // Pass 3: DrawOutline — 背面膨胀描边 (Inverted Hull Outline)
         //
-        // 原理：
-        //   Cull Front 只渲染模型背面，顶点沿法线方向向外膨胀 _OutlineOffset。
-        //   由于背面比正面略大，在模型边缘处背面会"溢出"形成描边线。
+        // ---- 几何原理 ----
         //
-        // Pass 组织：
-        //   Shader 内的 Pass 按从上到下的顺序执行。DrawOutline 放在最后
-        //   是因为它渲染背面（Cull Front），而前面的 Pass（ShadowCaster、
-        //   DepthNormals、UniversalForward）都渲染正面。背面的描边不会干扰
-        //   前面的深度/颜色写入，只需 ZWrite 确保描边被主渲染遮挡。
+        // 考虑一个球体：从相机看过去，正面（朝向相机的半球）正常渲染，
+        // 背面（背对相机的半球）被 Cull Front 剔除，正常情况下看不到。
         //
-        // Tags：
-        //   "RenderPipeline" = "UniversalPipeline" — 声明此 Pass 由 URP 渲染
-        //   "RenderType" = "Opaque"               — 不透明渲染类型
-        //   注意：无 "LightMode" 标签，URP 以默认方式处理此 Pass
+        // 但如果把背面的每个顶点沿法线方向向外推一段距离，背面就会膨胀
+        // 成一个稍大的球。在球的轮廓边缘处，这个膨胀的背面会"溢出"正面
+        // 的边界，从相机视角看形成一圈细线——这就是描边。
         //
-        // 参数：
-        //   _OutlineColor — 描边颜色（材质 Inspector 中设置）
-        //   _OutlineOffset — 外扩距离（越大描边越粗）
+        //              相机
+        //               │
+        //     ╭──────────┼──────────╮  ← 膨胀后的背面（Cull Front 渲染）
+        //     │  ╭───────┼───────╮  │
+        //     │  │  正面（正常渲染） │  │
+        //     │  ╰───────┼───────╯  │
+        //     ╰──────────┼──────────╯
+        //               │    ↑
+        //               │    轮廓处膨胀背面溢出 = 描边
+        //
+        // 关键设计决策：
+        //   1. 膨胀发生在模型空间（vertex.xyz + normal * offset），不依赖相机距离
+        //   2. 使用顶点法线（不是面法线），软边缘模型顶点法线平均后会更合理
+        //   3. 没有独立的 ZTest/ZWrite，使用默认 LEqual/On，
+        //      膨胀背面在正面"后面"→ Z 测试自动被遮挡 → 只留边缘描边
+        //
+        // ---- Pass 顺序 ----
+        //
+        // DrawOutline 放在 SubShader 最后一个 Pass（Pass 3），在
+        // ShadowCaster → DepthNormals → UniversalForward 之后执行。
+        // 顺序影响：
+        //   - 先渲染的 Pass（ShadowCaster）只写深度缓冲区，不写颜色
+        //   - DepthNormals 同样只写深度/法线缓冲
+        //   - UniversalForward 写颜色 + 深度（正面）
+        //   - DrawOutline 最后执行，膨胀背面比正面大，边缘溢出形成描边
+        //
+        // ---- Tags ----
+        //
+        // 无 "LightMode" 标签。
+        // 原因：带 LightMode="SRPDefaultUnlit" 或其他值时，URP 的
+        // 渲染循环可能跳过此 Pass（取决于 Renderer 配置和 RenderGraph 模式）。
+        // 不指定 LightMode 让 URP 以最兼容的方式处理。
         // ================================================================
         Pass
         {
@@ -377,59 +403,70 @@ Shader "Unlit/Face"
                 "RenderType" = "Opaque"
             }
 
-            // 剔除正面，只渲染背面 → 背面外扩后边缘可见
+            // 剔除正面（Cull Front）：只渲染法线背对相机的面。
+            // 这些面在模型内部，沿法线外扩后在轮廓处溢出 → 描边。
             Cull Front
 
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile_fog
+            #pragma multi_compile_fog       // 启用雾效变体（FOG_LINEAR/EXP/EXP2）
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            // 每个 Pass 有独立的 CBUFFER，变量名可以与其它 Pass 重复
+            // 此 Pass 独立的常量缓冲区，变量仅本 Pass 可见
             CBUFFER_START(UnityPerMaterial)
-                float4 _OutlineColor;   // 描边颜色 (RGBA)
-                float  _OutlineOffset;  // 外扩距离
+                float4 _OutlineColor;   // 描边颜色，材质 Inspector 中设置
+                float  _OutlineOffset;  // 外扩距离（模型空间单位），越大描边越粗
             CBUFFER_END
 
-            // 顶点输入：只需要位置和法线（描边不需要 UV/切线等）
+            // 顶点着色器输入：位置 + 法线用于外扩方向
             struct Attributes
             {
-                float4 vertex : POSITION;
-                float2 uv     : TEXCOORD0;
-                float3 normal : NORMAL;
+                float4 vertex : POSITION;  // 模型空间顶点坐标
+                float2 uv     : TEXCOORD0; // UV（本 Pass 未使用，保留兼容性）
+                float3 normal : NORMAL;    // 模型空间法线，决定外扩方向
             };
 
-            // 片元输入：传递裁剪空间位置和雾坐标
+            // 顶点着色器输出 → 片元着色器输入
             struct Varyings
             {
                 float2 uv         : TEXCOORD0;
-                float4 positionCS : SV_POSITION;
-                float  fogCoord   : TEXCOORD1;  // 用于 MixFog 雾效混合
+                float4 positionCS : SV_POSITION;  // 裁剪空间坐标，GPU 自动处理光栅化
+                float  fogCoord   : TEXCOORD1;    // 雾效坐标，传入 MixFog()
             };
 
+            // ------------------------------------------------------------------
+            // 顶点着色器
+            // 把背面顶点沿法线向外推 → 膨胀背面 → 边缘溢出形成描边
+            // ------------------------------------------------------------------
             Varyings vert(Attributes v)
             {
                 Varyings o;
 
-                // 顶点沿法线方向外扩：模型空间法线 × 外扩距离
+                // 模型空间法线 × 外扩距离 = 偏移量
+                // 对于球体：所有顶点沿径向（=法线方向）均匀外扩
+                // 对于角色：软边缘处法线平滑，描边连续；硬边处可能断裂
                 float3 offset = v.normal.xyz * _OutlineOffset;
                 VertexPositionInputs posInput = GetVertexPositionInputs(
                     v.vertex.xyz + offset);
 
                 o.uv         = v.uv;
-                o.positionCS = posInput.positionCS;
-                o.fogCoord   = ComputeFogFactor(posInput.positionCS.z);
+                o.positionCS = posInput.positionCS;               // 模型→世界→视→裁剪
+                o.fogCoord   = ComputeFogFactor(posInput.positionCS.z); // 雾效因子
 
                 return o;
             }
 
+            // ------------------------------------------------------------------
+            // 片元着色器
+            // 膨胀背面的可见部分（轮廓溢出区域） → 纯色描边
+            // ------------------------------------------------------------------
             float4 frag(Varyings i, bool isFacing : SV_IsFrontFace) : SV_Target
             {
-                // 直接输出描边颜色，混合雾效
+                // 不需要光照计算，不需要纹理采样，输出单一颜色即可
                 float4 col = _OutlineColor;
-                col.rgb = MixFog(col.rgb, i.fogCoord);
+                col.rgb = MixFog(col.rgb, i.fogCoord); // 远处描边融入雾色
                 return col;
             }
             ENDHLSL
