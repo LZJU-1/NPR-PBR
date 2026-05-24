@@ -45,10 +45,7 @@ Shader "Unlit/Face"
         // ================================================================
         _DoubleSided ("Double Sided", Range(0, 1)) = 0
         _Alpha ("Alpha", Range(0, 1)) = 1
-
-        // ---- 描边 ----
-        _OutlineColor  ("Outline Color",  Color) = (0, 0, 0, 1)
-        _OutlineWidth  ("Outline Width",  Range(0.001, 0.05)) = 0.01
+        _OutlineOffset ("Outline Offset", Float) = 0.000015
     }
 
     SubShader
@@ -62,57 +59,7 @@ Shader "Unlit/Face"
         LOD 100
 
         // ================================================================
-        // Pass 0: Outline — 背面膨胀描边
-        // ================================================================
-        Pass
-        {
-            Name "Outline"
-            Tags { "LightMode" = "SRPDefaultUnlit" }
-
-            Cull Front
-            ZWrite On
-
-            HLSLPROGRAM
-            #pragma vertex OutlineVert
-            #pragma fragment OutlineFrag
-
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            CBUFFER_START(UnityPerMaterial)
-                float4 _OutlineColor;
-                float  _OutlineWidth;
-            CBUFFER_END
-
-            struct Attributes
-            {
-                float4 vertex  : POSITION;
-                float3 normal  : NORMAL;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-            };
-
-            Varyings OutlineVert(Attributes input)
-            {
-                Varyings output;
-                float3 offset = input.normal * _OutlineWidth;
-                float4 pos = input.vertex;
-                pos.xyz += offset;
-                output.positionCS = TransformObjectToHClip(pos.xyz);
-                return output;
-            }
-
-            float4 OutlineFrag(Varyings input) : SV_Target
-            {
-                return _OutlineColor;
-            }
-            ENDHLSL
-        }
-
-        // ================================================================
-        // Pass 1: ShadowCaster — 向 Shadow Map 写入深度
+        // Pass 0: ShadowCaster — 向 Shadow Map 写入深度
         // ================================================================
         Pass
         {
@@ -212,6 +159,7 @@ Shader "Unlit/Face"
                 float4 _BaseTex_ST;
                 float  _DoubleSided, _Alpha;
                 float  _RampRow;
+                float  _OutlineOffset;
                 float3 _ForwardVector, _RightVector;
             CBUFFER_END
 
@@ -360,7 +308,9 @@ Shader "Unlit/Face"
                     float sdfRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, input.uv).r;
                     float mixSdf   = lerp(sdfRight, sdfLeft, exposRight);
 
-                    float sdfRaw = step(mixValue, mixSdf);
+                    // SDF R 通道: 高值=亮区(鼻梁), 低值=暗区(眼窝)
+                    // step(mixSdf, mixValue): mixSdf高的区域→1(亮), 低的区域→0(暗)
+                    float sdfRaw = step(mixSdf, mixValue);
 
                     // 光源在头部后方时强制全亮
                     sdf = lerp(1.0, sdfRaw,
