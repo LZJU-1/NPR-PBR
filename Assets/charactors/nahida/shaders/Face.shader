@@ -192,33 +192,32 @@ Shader "Unlit/Face"
             }
 
             // ------------------------------------------------------------
-            // 片元着色器 — 当前阶段：SDF 阴影调试输出
+            // 片元着色器 — 脸部 NPR（卡通渲染）
             //
-            // SDF 脸部阴影算法：
-            // 1. 将光源方向 L 投影到头部水平面（去掉垂直分量）得到 LpHead
-            // 2. 计算 LpHead 与 RightVector 的夹角，归一化为 [0, 1]
-            // 3. 用立方函数将角度映射为阴影阈值 mixValue
-            //    - 光从正面来（value≈0.5）→ mixValue≈0（阈值低，全亮）
-            //    - 光从侧面来（value≈0 或 1）→ mixValue≈1（阈值高，产生阴影）
-            // 4. 采样 SDF 贴图得到该像素的阴影阈值 mixSdf
-            // 5. step(mixValue, mixSdf)：当前阈值 >= 像素阈值 → 阴影
+            // 渲染流程：
+            //   1. 基础色 — Ambient + Diffuse 混合，叠乘 BaseTex、ToonTex
+            //   2. Ramp 阴影色 — 从 Face_Shadow.png 暗色端采样
+            //   3. SDF 阴影形状 — FaceLightmap.png + 光源方向 → 硬切蒙版
+            //   4. 合成 — sdf=1(亮面)用 baseColor，sdf=0(暗面)用 shadowColor
             //
-            // 相关贴图：
-            // - _SDF (FaceLightmap.png, R通道): 每像素阴影阈值
-            // - _RampTex (Face_Shadow.png): 阴影颜色 Ramp（当前未接入最终输出）
-            // - _BaseTex (颜.png): 脸部漫反射（当前未接入）
+            // 贴图用途：
+            //   _BaseTex   → 颜.png             脸部漫反射
+            //   _ToonTex   → toon_defo.bmp      MatCap 卡通光照叠加
+            //   _RampTex   → Face_Shadow.png    阴影颜色 Ramp（只用暗色端）
+            //   _SDF       → FaceLightmap.png   SDF 阴影阈值（R 通道）
+            //   _SphereTex → s1.bmp             球面反射（当前 _SphereTexFac=0 关闭）
+            //
+            // _ForwardVector / _RightVector 由 NahidaFaceScripts.cs 每帧写入
             // ------------------------------------------------------------
             float4 frag(Varyings input, bool isFacing : SV_IsFrontFace) : SV_Target
             {
                 Light light = GetMainLight(input.shadowCoord);
 
-                // ---- 基础向量 ----
+                // ---- 光照方向向量 ----
                 float3 N = normalize(input.normalWS);
-                float3 V = normalize(mul((float3x3)UNITY_MATRIX_I_V, input.positionVS * (-1)));
                 float3 L = normalize(light.direction);
 
-                // ---- MatCap UV（用于 ToonTex / SphereTex 采样）----
-                // 将世界空间法线转换到视空间，取 xy 映射到 [0,1] 作为 MatCap 坐标
+                // ---- MatCap UV（用于 ToonTex 采样）----
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
                 float2 matcapUV = normalVS.xy * 0.5 + 0.5;
 
@@ -227,25 +226,28 @@ Shader "Unlit/Face"
                 float4 toonTex   = SAMPLE_TEXTURE2D(_ToonTex,   sampler_ToonTex,   matcapUV);
                 float4 sphereTex = SAMPLE_TEXTURE2D(_SphereTex, sampler_SphereTex, matcapUV);
 
-                // ---- 基础色计算 ----
-                // AmbientColor 为底色，lerp 混入 DiffuseColor（0.6 权重）模拟基础漫反射
+                // ====================================================
+                // 1. 基础色计算
+                //    AmbientColor 为暗面色调，lerp 混入 DiffuseColor
+                //    再叠乘漫反射贴图、MatCap 贴图、球面反射贴图
+                // ====================================================
                 float3 baseColor = _AmbientColor.rgb;
                 baseColor = saturate(lerp(baseColor, baseColor + _DiffuseColor.rgb, 0.6));
-                // 依次叠乘漫反射贴图、MatCap 贴图、球面反射贴图
                 baseColor = lerp(baseColor, baseColor * baseTex.rgb,   _BaseTexFac);
                 baseColor = lerp(baseColor, baseColor * toonTex.rgb,   _ToonTexFac);
-                // _SphereMulAdd 控制球面贴图混合模式：0=乘 1=加
                 baseColor = lerp(
                     lerp(baseColor, baseColor * sphereTex.rgb,      _SphereTexFac),
                     lerp(baseColor, baseColor + sphereTex.rgb,      _SphereTexFac),
                     _SphereMulAdd);
 
-                // ---- Ramp 阴影颜色采样 ----
-                // Ramp 贴图纵向排列多行，每行对应不同材质类型
-                // U=暗色端(左) → 亮色端(右)，V=行选择
-                float rampV = _RampRow / 10.0 - 0.05;
+                // ====================================================
+                // 2. Ramp 阴影颜色
+                //    从 Face_Shadow.png 的指定行（_RampRow）暗色端采样
+                //    U=0.003(最暗端), V=行选择
+                //    日夜两套：Night 行 = Day 行 + 0.5 纵向偏移
+                // ====================================================
+                float rampV       = _RampRow / 10.0 - 0.05;
                 float rampClampMin = 0.003;
-                // 日夜两套 UV（Night 行 = Day 行 + 0.5），根据光源 Y 分量插值
                 float2 rampDayUV   = float2(rampClampMin, 1.0 - rampV);
                 float2 rampNightUV = float2(rampClampMin, 1.0 - (rampV + 0.5));
                 float  isDay       = (L.y + 1.0) / 2.0;
@@ -255,14 +257,18 @@ Shader "Unlit/Face"
                     isDay);
 
                 // ====================================================
-                // SDF 脸部方向阴影计算
+                // 3. SDF 脸部方向阴影蒙版
+                //
+                // 将光源方向投影到头部水平面 → 计算与 rightVec 夹角
+                // → 立方函数映射为阈值 mixValue → 与 SDF 贴图像素值比较
+                //
+                // SDF 贴图 (FaceLightmap.png, R 通道):
+                //   存储每个像素的"阴影触发角度阈值"
+                //   当 mixValue >= mixSdf 时该像素处于阴影中
                 // ====================================================
-
-                // 从 C# 脚本传入的头部方向向量
                 float3 forwardVec = _ForwardVector;
                 float3 rightVec   = _RightVector;
 
-                // 将光源方向投影到头部水平面：去掉沿 upVector 的分量
                 float3 upVector  = cross(forwardVec, rightVec);
                 float  sqrUpLen  = dot(upVector, upVector);
                 float3 LpU       = sqrUpLen > 1e-12
@@ -270,47 +276,49 @@ Shader "Unlit/Face"
                                    : float3(0, 0, 0);
                 float3 LpHead    = L - LpU;
 
-                // 默认全亮（当 LpHead 接近零向量时，即光源在头顶正上方）
-                float sdf = 1.0;
+                float sdf = 1.0; // 默认全亮
                 float LpHeadLen = length(LpHead);
 
                 if (LpHeadLen > 1e-5)
                 {
                     float3 LpHeadDir = LpHead / LpHeadLen;
 
-                    // 计算光源水平方向与头部 rightVec 的夹角，归一化到 [0, 1]
-                    // clamp 防止 acos 输入超 [-1,1] 引发 NaN
                     float cosAngle = dot(LpHeadDir, normalize(rightVec));
                     cosAngle = clamp(cosAngle, -1.0, 1.0);
                     float angle01 = acos(cosAngle) / 3.1415926;
 
-                    // 判断光源在脸部哪一侧
                     float exposRight = step(angle01, 0.5);
 
-                    // 立方映射：将角度转为阴影阈值
-                    // 正面光 (angle01≈0.5) → 阈值≈0（全亮）
-                    // 侧面光 (angle01≈0 或 1) → 阈值≈1（产生阴影）
                     float valueR = pow(saturate(1.0 - angle01 * 2.0), 3);
                     float valueL = pow(saturate(angle01 * 2.0 - 1.0), 3);
                     float mixValue = lerp(valueL, valueR, exposRight);
 
-                    // 采样 SDF 贴图：根据光源侧别翻转 UV 的 U 方向
-                    // 右半脸看 i.uv.x 正常，左半脸看 1-i.uv.x（镜像）
                     float sdfLeft  = SAMPLE_TEXTURE2D(_SDF, sampler_SDF,
                                         float2(1.0 - input.uv.x, input.uv.y)).r;
                     float sdfRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, input.uv).r;
                     float mixSdf   = lerp(sdfRight, sdfLeft, exposRight);
 
-                    // 硬切判断：当前阈值 >= 像素阈值 → 该像素处于阴影中
                     float sdfRaw = step(mixValue, mixSdf);
-
-                    // 光源在头部后方时强制全亮（面部不应被后方光照成阴影）
                     sdf = lerp(1.0, sdfRaw,
                                step(0.0, dot(LpHeadDir, normalize(forwardVec))));
                 }
 
-                // ---- 当前输出：SDF 阴影调试 ----
-                return float4(sdf.xxx, 1.0);
+                // ====================================================
+                // 4. 合成
+                //    sdf=1(亮面) → baseColor
+                //    sdf=0(暗面) → baseColor × rampColor × ShadowColor
+                // ====================================================
+                float3 shadowColor = baseColor * rampColor * _ShadowColor.rgb;
+                float3 finalColor  = lerp(shadowColor, baseColor, sdf);
+
+                float alpha = _Alpha * baseTex.a;
+                alpha = saturate(min(max(isFacing, _DoubleSided), alpha));
+
+                float4 col = float4(finalColor, alpha);
+                clip(col.a - 0.5);
+                col.rgb = MixFog(col.rgb, input.fogCoord);
+
+                return col;
             }
             ENDHLSL
         }
