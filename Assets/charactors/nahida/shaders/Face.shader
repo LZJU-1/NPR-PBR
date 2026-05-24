@@ -243,13 +243,13 @@ Shader "Unlit/Face"
                 // ====================================================
                 // 2. Ramp 阴影颜色
                 //    从 Face_Shadow.png 的指定行（_RampRow）暗色端采样
-                //    U=0.003(最暗端), V=行选择
+                //    U=0.003 取 Ramp 最暗端暖色，避免中间冷色调偏绿
                 //    日夜两套：Night 行 = Day 行 + 0.5 纵向偏移
                 // ====================================================
-                float rampV       = _RampRow / 10.0 - 0.05;
-                float rampClampMin = 0.003;
-                float2 rampDayUV   = float2(rampClampMin, 1.0 - rampV);
-                float2 rampNightUV = float2(rampClampMin, 1.0 - (rampV + 0.5));
+                float rampV        = _RampRow / 10.0 - 0.05;
+                float rampU        = 0.003;
+                float2 rampDayUV   = float2(rampU, 1.0 - rampV);
+                float2 rampNightUV = float2(rampU, 1.0 - (rampV + 0.5));
                 float  isDay       = (L.y + 1.0) / 2.0;
                 float3 rampColor   = lerp(
                     SAMPLE_TEXTURE2D(_RampTex, sampler_RampTex, rampNightUV).rgb,
@@ -257,14 +257,17 @@ Shader "Unlit/Face"
                     isDay);
 
                 // ====================================================
-                // 3. SDF 脸部方向阴影蒙版
+                // 3. SDF 脸部方向阴影
                 //
-                // 将光源方向投影到头部水平面 → 计算与 rightVec 夹角
-                // → 立方函数映射为阈值 mixValue → 与 SDF 贴图像素值比较
+                // FaceLightmap.png 四通道含义：
+                //   R — SDF 阴影阈值：像素被判定为阴影所需的光源角度阈值
+                //   G — 阴影强度衰减：局部减淡阴影（如脸颊、眼窝）
+                //   B — 高光遮罩（当前未使用）
+                //   A — 强制高亮遮罩：鼻梁、额头中心等凸起处永不落阴影
                 //
-                // SDF 贴图 (FaceLightmap.png, R 通道):
-                //   存储每个像素的"阴影触发角度阈值"
-                //   当 mixValue >= mixSdf 时该像素处于阴影中
+                // 计算流程：
+                //   光源方向投影到头部水平面 → 夹角 → 立方映射 → 阈值
+                //   → step 硬切产生 sdf 蒙版 → G 通道减淡 → A 通道提亮
                 // ====================================================
                 float3 forwardVec = _ForwardVector;
                 float3 rightVec   = _RightVector;
@@ -293,28 +296,39 @@ Shader "Unlit/Face"
                     float valueL = pow(saturate(angle01 * 2.0 - 1.0), 3);
                     float mixValue = lerp(valueL, valueR, exposRight);
 
-                    float sdfLeft  = SAMPLE_TEXTURE2D(_SDF, sampler_SDF,
-                                        float2(1.0 - input.uv.x, input.uv.y)).r;
-                    float sdfRight = SAMPLE_TEXTURE2D(_SDF, sampler_SDF, input.uv).r;
-                    float mixSdf   = lerp(sdfRight, sdfLeft, exposRight);
+                    // 根据光源侧别翻转 UV 的 U 方向采样 SDF
+                    float2 uvLeft  = float2(1.0 - input.uv.x, input.uv.y);
+                    float2 uvRight = input.uv;
+                    float4 shadowTex = SAMPLE_TEXTURE2D(_SDF, sampler_SDF,
+                                         lerp(uvRight, uvLeft, exposRight));
 
-                    float sdfRaw = step(mixValue, mixSdf);
+                    // R 通道：SDF 硬切 → 阴影形状
+                    float sdfRaw = step(mixValue, shadowTex.r);
+
+                    // 光源在头部后方时强制全亮
                     sdf = lerp(1.0, sdfRaw,
                                step(0.0, dot(LpHeadDir, normalize(forwardVec))));
+
+                    // G 通道：阴影强度衰减（脸颊等处让阴影更淡）
+                    sdf *= shadowTex.g;
+
+                    // A 通道：强制高亮区域（鼻梁、额头中心等凸起处）
+                    sdf = lerp(sdf, 1.0, shadowTex.a);
                 }
 
                 // ====================================================
                 // 4. 合成
-                //    sdf=1(亮面) → baseColor
-                //    sdf=0(暗面) → baseColor × rampColor × ShadowColor
+                //    sdf=1 → 亮面 baseColor
+                //    sdf=0 → 暗面 baseColor × rampColor × ShadowColor
+                //    sdf=中间值 → G 通道产生的柔和过渡
                 // ====================================================
                 float3 shadowColor = baseColor * rampColor * _ShadowColor.rgb;
-                float3 finalColor  = lerp(shadowColor, baseColor, sdf);
+                float3 diffuse     = lerp(shadowColor, baseColor, sdf);
 
-                float alpha = _Alpha * baseTex.a;
+                float alpha = _Alpha * baseTex.a * toonTex.a * sphereTex.a;
                 alpha = saturate(min(max(isFacing, _DoubleSided), alpha));
 
-                float4 col = float4(finalColor, alpha);
+                float4 col = float4(diffuse, alpha);
                 clip(col.a - 0.5);
                 col.rgb = MixFog(col.rgb, input.fogCoord);
 
