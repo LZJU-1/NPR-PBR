@@ -447,7 +447,7 @@ Shader "Unlit/Face"
                 // 模型空间法线 × 外扩距离 = 偏移量
                 // 对于球体：所有顶点沿径向（=法线方向）均匀外扩
                 // 对于角色：软边缘处法线平滑，描边连续；硬边处可能断裂
-                float3 offset = v.color.rgb * _OutlineOffset;
+                float3 offset = (v.color.rgb * 2.0 - 1.0) * _OutlineOffset;
                 VertexPositionInputs posInput = GetVertexPositionInputs(
                     v.vertex.xyz + offset);
 

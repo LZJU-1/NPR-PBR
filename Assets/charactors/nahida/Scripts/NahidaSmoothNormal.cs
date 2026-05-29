@@ -75,11 +75,13 @@ public class NahidaSmoothNormal : MonoBehaviour
                 smoothTangents[i] = new Vector4(sum.x, sum.y, sum.z, 1f);
         }
 
-        // 3. 写入 mesh.colors（避免覆盖 tangents 破坏法线贴图 TBN 矩阵）
+        // 3. 编码写入 mesh.colors: [-1,1] → [0,1]（Color 通道 GPU 端会钳制负数）
         Color[] colors = new Color[vertices.Length];
         for (int i = 0; i < vertices.Length; i++)
-            colors[i] = new Color(smoothTangents[i].x, smoothTangents[i].y,
-                                   smoothTangents[i].z, 1f);
+            colors[i] = new Color(smoothTangents[i].x * 0.5f + 0.5f,
+                                  smoothTangents[i].y * 0.5f + 0.5f,
+                                  smoothTangents[i].z * 0.5f + 0.5f,
+                                  1f);
         mesh.colors = colors;
 
         int smoothGroupCount = 0;
