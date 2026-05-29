@@ -75,12 +75,12 @@ public class NahidaSmoothNormal : MonoBehaviour
                 smoothTangents[i] = new Vector4(sum.x, sum.y, sum.z, 1f);
         }
 
-        // 3. 写入 mesh.uv2（天然支持负数，不需要编解码）
-        var uv2List = new List<Vector3>(vertices.Length);
+        // 3. 写入 mesh.uv3（Vector4 格式，天然支持负数，不与现有 UV 冲突）
+        var uv3List = new List<Vector4>(vertices.Length);
         for (int i = 0; i < vertices.Length; i++)
-            uv2List.Add(new Vector3(smoothTangents[i].x, smoothTangents[i].y,
-                                     smoothTangents[i].z));
-        mesh.SetUVs(1, uv2List);
+            uv3List.Add(new Vector4(smoothTangents[i].x, smoothTangents[i].y,
+                                     smoothTangents[i].z, 1f));
+        mesh.SetUVs(2, uv3List);
 
         int smoothGroupCount = 0;
         foreach (var g in groups)

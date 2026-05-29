@@ -426,6 +426,7 @@ Shader "Unlit/Face"
                 float4 vertex : POSITION;  // 模型空间顶点坐标
                 float2 uv     : TEXCOORD0; // UV（本 Pass 未使用，保留兼容性）
                 float3 normal : NORMAL;    // 模型空间法线，决定外扩方向
+                float4 texcoord2 : TEXCOORD2;   // 平滑法线（UV3）
             };
 
             // 顶点着色器输出 → 片元着色器输入
@@ -447,7 +448,7 @@ Shader "Unlit/Face"
                 // 模型空间法线 × 外扩距离 = 偏移量
                 // 对于球体：所有顶点沿径向（=法线方向）均匀外扩
                 // 对于角色：软边缘处法线平滑，描边连续；硬边处可能断裂
-                float3 offset = v.normal.xyz * _OutlineOffset;
+                float3 offset = v.texcoord2.xyz * _OutlineOffset;
                 VertexPositionInputs posInput = GetVertexPositionInputs(
                     v.vertex.xyz + offset);
 

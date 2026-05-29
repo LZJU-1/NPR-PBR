@@ -447,6 +447,7 @@ Shader "Unlit/BodyAndHair"
                 half3  normal  : NORMAL;
                 half4  tangent : TANGENT;
                 half4  color   : COLOR0;
+                float4 texcoord2 : TEXCOORD2;   // 平滑法线（UV3）
             };
 
             struct v2f
@@ -475,7 +476,7 @@ Shader "Unlit/BodyAndHair"
 
                 // 沿法线外扩顶点（备选：v.tangent.xyz 用于头发）
                 VertexPositionInputs vertexInput = GetVertexPositionInputs(
-                    v.vertex.xyz + v.normal.xyz * _OutlineOffset);
+                    v.vertex.xyz + v.texcoord2.xyz * _OutlineOffset);
 
                 o.uv         = TRANSFORM_TEX(v.uv, _BaseTex);
                 o.positionCS = vertexInput.positionCS;
