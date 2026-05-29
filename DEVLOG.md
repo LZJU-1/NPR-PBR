@@ -166,3 +166,41 @@ ilm.a ∈ [0.85, 1.00] → _OutlineMapColor4
 - Face.shader **不用平滑法线**（`v.normal.xyz`），因为嘴巴凹陷处平滑后会出错
 
 **使用**：脚本挂到 SkinnedMeshRenderer 所在 GameObject，Play 时 Awake 自动执行。也可右键 → "执行平滑" 手动触发。
+
+---
+
+### 边缘光（纯菲涅尔）
+
+**方案**：`pow(1 - NoV, _RimPower) * _RimIntensity * _RimColor`，加法混合到 albedo/diffuse。
+
+**参数**：`_RimColor`（颜色）、`_RimPower`（衰减锐度，默认 4）、`_RimIntensity`（强度，默认 0.3）。
+
+**踩坑**：教程的深度差方案（`SampleSceneDepth` + `normalVS.x` 偏移）尝试 6 次均失败：
+- `normalVS.x` 翻转产生接缝 → 改四方向采样 → 仍有接缝
+- `positionNDC` 范围 NDC vs UV 不一致 → 采样偏移错位
+- 披风深度信息串扰到身体 → 非预期光晕
+
+**最终选择纯菲涅尔**：无深度纹理依赖、无方向翻转、无接缝，已在两个 Shader 中稳定运行。
+
+---
+
+## NPR 阶段完成总结 (2026-05-30)
+
+### Face.shader
+- SDF 脸部方向阴影（FaceLightmap.png R 通道 + 光源角度）
+- Ramp 阴影色（Face_Shadow.png）
+- ShadowTex G/A 通道调制（阴影衰减 + 强制高亮）
+- MatCap 卡通光照（skin.bmp）
+- 纯色背面膨胀描边（Cull Front，`v.normal` 外扩）
+- 纯菲涅尔边缘光
+
+### BodyAndHair.shader
+- ILM 四通道 NPR 管线（R=金属度, G=阴影软硬, B=高光遮罩, A=材质类型）
+- Ramp 5 行材质选择（与 ILM.a 联动）
+- Blinn-Phong 高光（金属/非金属分离）
+- MatCap 光照 + 球面反射
+- 法线贴图细节
+- ILM.a 多色描边（BaseTex 自动采样颜色）
+- 薄面 clip 遮罩（`clip(color.a)`）
+- 平滑法线（面积权重，UV3 通道）
+- 纯菲涅尔边缘光
