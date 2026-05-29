@@ -52,6 +52,7 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
+        _Brightness   ("Brightness",    Range(0.5, 3)) = 1.2
 
         // ---- 边缘光（菲涅尔）----
         _RimColor     ("Rim Color",     Color) = (1, 1, 1, 1)
@@ -178,7 +179,7 @@ Shader "Unlit/BodyAndHair"
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
-                float  _DoubleSided, _Alpha;
+                float  _DoubleSided, _Alpha, _Brightness;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -418,6 +419,8 @@ Shader "Unlit/BodyAndHair"
                 clip(col.a - 0.5); // Alpha < 0.5 时丢弃片元
 
                 // 雾效混合
+                col.rgb *= _Brightness;
+                col.rgb *= _Brightness;
                 col.rgb = MixFog(col.rgb, input.fogCoord);
 
                 return col;
