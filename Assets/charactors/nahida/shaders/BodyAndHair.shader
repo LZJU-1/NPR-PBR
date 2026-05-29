@@ -494,7 +494,7 @@ Shader "Unlit/BodyAndHair"
                 float  matEnum3 = 0.7;
                 float  matEnum4 = 1.0;
 
-                // 级联 lerp，与主 Pass Ramp 行选择逻辑一致
+                // ILM.a → 选择描边色的 Alpha（用于 clip 薄面遮罩）
                 float4 color = lerp(_OutlineMapColor4, _OutlineMapColor3,
                                     step(ilm.a, (matEnum3 + matEnum4) / 2));
                 color = lerp(color, _OutlineMapColor2,
@@ -504,10 +504,15 @@ Shader "Unlit/BodyAndHair"
                 color = lerp(color, _OutlineMapColor0,
                              step(ilm.a, (matEnum0 + matEnum1) / 2));
 
-                // 描边色 Alpha=0 → 丢弃像素（薄面材质设 a=0 可消除全黑）
+                // Alpha=0 → 丢弃像素（薄面/透明区域）
                 clip(color.a - 0.01);
 
-                float4 col = float4(color.rgb, 1);
+                // 描边颜色 = BaseTex 漫反射色 × 压暗系数
+                // 皮肤区域自动偏暖棕，衣服自动偏深黑，不需要手动调色
+                float4 baseTex = tex2D(_BaseTex, i.uv);
+                float3 outlineRgb = baseTex.rgb * 0.25;
+
+                float4 col = float4(outlineRgb, 1);
                 col.rgb = MixFog(col.rgb, i.fogCoord);
                 return col;
             }
