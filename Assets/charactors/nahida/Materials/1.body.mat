@@ -147,7 +147,7 @@ Material:
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
-    - _OutlineOffset: 0.000015
+    - _OutlineOffset: 0.002
     - _Parallax: 0.02
     - _QueueOffset: 0
     - _RampMapRow0: 1
