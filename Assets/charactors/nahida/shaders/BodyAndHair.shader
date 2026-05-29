@@ -407,7 +407,7 @@ Shader "Unlit/BodyAndHair"
                 float3 albedo = diffuse + specular + metallic;
 
                 // ---- 边缘光（深度差 + 菲涅尔）----
-                float2 screenUV     = i.positionNDC.xy / i.positionNDC.w;
+                float2 screenUV     = input.positionNDC.xy / input.positionNDC.w;
                 float  rawDepth     = SAMPLE_TEXTURE2D_X(_CameraDepthTexture, sampler_CameraDepthTexture, screenUV).r;
                 float  linearDepth  = LinearEyeDepth(rawDepth, _ZBufferParams);
                 float  rimOffset    = _RimOffset / _ScreenParams.x / max(1.0, pow(linearDepth, 2.0));
