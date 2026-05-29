@@ -46,14 +46,6 @@ Shader "Unlit/Face"
         _DoubleSided ("Double Sided", Range(0, 1)) = 0
         _Alpha ("Alpha", Range(0, 1)) = 1
 
-        // ---- 边缘光 ----
-        _RimOffset       ("Rim Offset",        Range(1, 20))  = 6
-        _RimThreshold    ("Rim Threshold",     Range(0, 0.5))  = 0.03
-        _RimStrength     ("Rim Strength",      Range(0, 2))    = 0.6
-        _RimMax          ("Rim Max",           Range(0, 1))    = 0.3
-        _RimFresnelPower ("Rim Fresnel Power", Range(1, 20))   = 6
-        _RimFresnelClamp ("Rim Fresnel Clamp", Range(0, 1))    = 0.8
-
         // ---- 描边（背面膨胀法 / Inverted Hull Outline）----
         // _OutlineColor:  描边颜色，RGBA 的 A 必须 = 1 否则透明不可见
         // _OutlineOffset: 顶点沿法线外扩距离（模型空间单位），值越大描边越粗
@@ -174,8 +166,6 @@ Shader "Unlit/Face"
                 float  _DoubleSided, _Alpha;
                 float  _RampRow;
                 float  _OutlineOffset;
-                float  _RimOffset, _RimThreshold, _RimStrength, _RimMax;
-                float  _RimFresnelPower, _RimFresnelClamp;
                 float3 _ForwardVector, _RightVector;
             CBUFFER_END
 
@@ -237,8 +227,6 @@ Shader "Unlit/Face"
                 // ---- 光照方向向量 ----
                 float3 N = normalize(input.normalWS);
                 float3 L = normalize(light.direction);
-                float3 V = normalize(mul((float3x3)UNITY_MATRIX_I_V, input.positionVS * (-1.0)));
-                float  NoV = dot(N, V);
 
                 // ---- MatCap UV（用于 ToonTex 采样）----
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
@@ -348,21 +336,6 @@ Shader "Unlit/Face"
                 // ====================================================
                 float3 shadowColor = baseColor * rampColor * _ShadowColor.rgb;
                 float3 diffuse     = lerp(shadowColor, baseColor, sdf);
-
-                // ---- 边缘光（深度差 + 菲涅尔）----
-                float2 screenUV     = input.positionNDC.xy;
-                float  rawDepth     = SampleSceneDepth(screenUV);
-                float  linearDepth  = LinearEyeDepth(rawDepth, _ZBufferParams);
-                float  rimOffset    = _RimOffset / _ScreenParams.x / max(1.0, pow(linearDepth, 2.0));
-                float2 screenOffset = float2(lerp(-1.0, 1.0, step(0.0, normalVS.x)) * rimOffset, 0.0);
-                float  offsetDepth  = SampleSceneDepth(screenUV + screenOffset);
-                float  offsetLinear = LinearEyeDepth(offsetDepth, _ZBufferParams);
-                float  rim          = saturate(offsetLinear - linearDepth);
-                rim = step(_RimThreshold, rim) * clamp(rim * _RimStrength, 0.0, _RimMax);
-                float fresnel  = 1.0 - saturate(NoV);
-                fresnel = pow(fresnel, _RimFresnelPower);
-                fresnel = fresnel * _RimFresnelClamp + (1.0 - _RimFresnelClamp);
-                diffuse = 1.0 - (1.0 - rim * fresnel) * (1.0 - diffuse);
 
                 float alpha = _Alpha * baseTex.a * toonTex.a * sphereTex.a;
                 alpha = saturate(min(max(isFacing, _DoubleSided), alpha));

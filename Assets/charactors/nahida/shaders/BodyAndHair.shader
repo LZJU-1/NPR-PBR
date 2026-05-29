@@ -53,14 +53,6 @@ Shader "Unlit/BodyAndHair"
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
 
-        // ---- 边缘光 ----
-        _RimOffset       ("Rim Offset",        Range(1, 20))  = 6
-        _RimThreshold    ("Rim Threshold",     Range(0, 0.5))  = 0.03
-        _RimStrength     ("Rim Strength",      Range(0, 2))    = 0.6
-        _RimMax          ("Rim Max",           Range(0, 1))    = 0.3
-        _RimFresnelPower ("Rim Fresnel Power", Range(1, 20))   = 6
-        _RimFresnelClamp ("Rim Fresnel Clamp", Range(0, 1))    = 0.8
-
         // ---- 描边 ----
         // _OutlineOffset: 沿法线外扩距离
         // _OutlineMapColor0~4: 5 种 ILM 材质类型的描边颜色，由 ILM.a 选择
@@ -185,8 +177,6 @@ Shader "Unlit/BodyAndHair"
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
-                float  _RimOffset, _RimThreshold, _RimStrength, _RimMax;
-                float  _RimFresnelPower, _RimFresnelClamp;
             CBUFFER_END
 
             // 贴图与采样器 — 与 Properties 块一一对应
@@ -265,7 +255,6 @@ Shader "Unlit/BodyAndHair"
 
                 float NoL = dot(N, L);
                 float NoH = dot(N, H);
-                float NoV = dot(N, V);
 
                 // ---- MatCap UV ----
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
@@ -408,21 +397,6 @@ Shader "Unlit/BodyAndHair"
                 // 6. 合成
                 // ====================================================
                 float3 albedo = diffuse + specular + metallic;
-
-                // ---- 边缘光（深度差 + 菲涅尔）----
-                float2 screenUV     = input.positionNDC.xy;
-                float  rawDepth     = SampleSceneDepth(screenUV);
-                float  linearDepth  = LinearEyeDepth(rawDepth, _ZBufferParams);
-                float  rimOffset    = _RimOffset / _ScreenParams.x / max(1.0, pow(linearDepth, 2.0));
-                float2 screenOffset = float2(lerp(-1.0, 1.0, step(0.0, normalVS.x)) * rimOffset, 0.0);
-                float  offsetDepth  = SampleSceneDepth(screenUV + screenOffset);
-                float  offsetLinear = LinearEyeDepth(offsetDepth, _ZBufferParams);
-                float  rim          = saturate(offsetLinear - linearDepth);
-                rim = step(_RimThreshold, rim) * clamp(rim * _RimStrength, 0.0, _RimMax);
-                float fresnel  = 1.0 - saturate(NoV);
-                fresnel = pow(fresnel, _RimFresnelPower);
-                fresnel = fresnel * _RimFresnelClamp + (1.0 - _RimFresnelClamp);
-                albedo = 1.0 - (1.0 - rim * fresnel) * (1.0 - albedo);
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
