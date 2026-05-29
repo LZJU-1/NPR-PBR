@@ -163,7 +163,7 @@ Shader "Unlit/Face"
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
-                float  _DoubleSided, _Alpha, _Brightness;
+                float  _DoubleSided, _Alpha;
                 float  _RampRow;
                 float  _OutlineOffset;
                 float4 _RimColor;
@@ -351,8 +351,6 @@ Shader "Unlit/Face"
 
                 float4 col = float4(diffuse, alpha);
                 clip(col.a - 0.5);
-                col.rgb *= _Brightness;
-                col.rgb *= _Brightness;
                 col.rgb = MixFog(col.rgb, input.fogCoord);
 
                 return col;
