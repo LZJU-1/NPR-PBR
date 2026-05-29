@@ -52,7 +52,16 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
-        _OutlineOffset ("Outline Offset", Float)      = 0.000015
+
+        // ---- 描边 ----
+        // _OutlineOffset: 沿法线外扩距离
+        // _OutlineMapColor0~4: 5 种 ILM 材质类型的描边颜色，由 ILM.a 选择
+        _OutlineOffset    ("Outline Offset",    Float) = 0.001
+        _OutlineMapColor0 ("Outline Map Color 0", Color) = (0, 0, 0, 1)
+        _OutlineMapColor1 ("Outline Map Color 1", Color) = (0, 0, 0, 1)
+        _OutlineMapColor2 ("Outline Map Color 2", Color) = (0, 0, 0, 1)
+        _OutlineMapColor3 ("Outline Map Color 3", Color) = (0, 0, 0, 1)
+        _OutlineMapColor4 ("Outline Map Color 4", Color) = (0, 0, 0, 1)
     }
 
     SubShader
@@ -400,6 +409,103 @@ Shader "Unlit/BodyAndHair"
                 // 雾效混合
                 col.rgb = MixFog(col.rgb, input.fogCoord);
 
+                return col;
+            }
+            ENDHLSL
+        }
+
+        // ================================================================
+        // Pass 3: DrawOutline — 背面膨胀描边（ILM.a 多色）
+        //
+        // Cull Front 只渲染背面，顶点沿法线外扩 _OutlineOffset。
+        // 片元着色器采样 ILM.a 从 5 个 _OutlineMapColor 中选色，
+        // 实现不同材质类型使用不同描边颜色（皮肤/衣服/头发区分）。
+        // ================================================================
+        Pass
+        {
+            Name "DrawOutline"
+            Tags
+            {
+                "RenderPipeline" = "UniversalPipeline"
+                "RenderType"     = "Opaque"
+            }
+
+            // 只渲染背面 → 膨胀后在轮廓处溢出形成描边
+            Cull Front
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_fog
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            struct appdata
+            {
+                float4 vertex  : POSITION;
+                float2 uv      : TEXCOORD0;
+                half3  normal  : NORMAL;
+                half4  tangent : TANGENT;
+                half4  color   : COLOR0;
+            };
+
+            struct v2f
+            {
+                float2 uv         : TEXCOORD0;
+                float4 positionCS : SV_POSITION;
+                float  fogCoord   : TEXCOORD1;
+            };
+
+            // 使用 sampler2D 旧语法避免与主 Pass 的 TEXTURE2D/SAMPLER 冲突
+            CBUFFER_START(UnityPerMaterial)
+                sampler2D _BaseTex;
+                float4    _BaseTex_ST;
+                sampler2D _ILM;
+                float4    _OutlineMapColor0;
+                float4    _OutlineMapColor1;
+                float4    _OutlineMapColor2;
+                float4    _OutlineMapColor3;
+                float4    _OutlineMapColor4;
+                float     _OutlineOffset;
+            CBUFFER_END
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+
+                // 沿法线外扩顶点（备选：v.tangent.xyz 用于头发）
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(
+                    v.vertex.xyz + v.normal.xyz * _OutlineOffset);
+
+                o.uv         = TRANSFORM_TEX(v.uv, _BaseTex);
+                o.positionCS = vertexInput.positionCS;
+                o.fogCoord   = ComputeFogFactor(vertexInput.positionCS.z);
+
+                return o;
+            }
+
+            float4 frag(v2f i, bool isFacing : SV_IsFrontFace) : SV_Target
+            {
+                // 采样 ILM A 通道 → 材质类型枚举值
+                float4 ilm     = tex2D(_ILM, i.uv);
+                float  matEnum0 = 0.0;
+                float  matEnum1 = 0.3;
+                float  matEnum2 = 0.5;
+                float  matEnum3 = 0.7;
+                float  matEnum4 = 1.0;
+
+                // 级联 lerp，与主 Pass Ramp 行选择逻辑一致
+                float4 color = lerp(_OutlineMapColor4, _OutlineMapColor3,
+                                    step(ilm.a, (matEnum3 + matEnum4) / 2));
+                color = lerp(color, _OutlineMapColor2,
+                             step(ilm.a, (matEnum2 + matEnum3) / 2));
+                color = lerp(color, _OutlineMapColor1,
+                             step(ilm.a, (matEnum1 + matEnum2) / 2));
+                color = lerp(color, _OutlineMapColor0,
+                             step(ilm.a, (matEnum0 + matEnum1) / 2));
+
+                float4 col = float4(color.rgb, 1);
+                col.rgb = MixFog(col.rgb, i.fogCoord);
                 return col;
             }
             ENDHLSL
