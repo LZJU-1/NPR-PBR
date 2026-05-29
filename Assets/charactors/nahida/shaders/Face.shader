@@ -166,6 +166,8 @@ Shader "Unlit/Face"
                 float  _DoubleSided, _Alpha;
                 float  _RampRow;
                 float  _OutlineOffset;
+                float4 _RimColor;
+                float  _RimPower, _RimIntensity;
                 float3 _ForwardVector, _RightVector;
             CBUFFER_END
 
@@ -227,6 +229,8 @@ Shader "Unlit/Face"
                 // ---- 光照方向向量 ----
                 float3 N = normalize(input.normalWS);
                 float3 L = normalize(light.direction);
+                float3 V = normalize(mul((float3x3)UNITY_MATRIX_I_V, input.positionVS * (-1.0)));
+                float  NoV = dot(N, V);
 
                 // ---- MatCap UV（用于 ToonTex 采样）----
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
@@ -336,6 +340,11 @@ Shader "Unlit/Face"
                 // ====================================================
                 float3 shadowColor = baseColor * rampColor * _ShadowColor.rgb;
                 float3 diffuse     = lerp(shadowColor, baseColor, sdf);
+
+                // ---- 边缘光（菲涅尔）----
+                float fresnel = 1.0 - saturate(NoV);
+                fresnel = pow(fresnel, _RimPower);
+                diffuse += fresnel * _RimIntensity * _RimColor.rgb;
 
                 float alpha = _Alpha * baseTex.a * toonTex.a * sphereTex.a;
                 alpha = saturate(min(max(isFacing, _DoubleSided), alpha));
