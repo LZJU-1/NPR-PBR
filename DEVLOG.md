@@ -135,3 +135,34 @@ ilm.a ∈ [0.85, 1.00] → _OutlineMapColor4
 - 尝试 `v.color.r` 顶点色控制外扩 → 无效（模型未存储该数据）
 - 尝试 `v.tangent` 外扩 → 方向不对称，脸部不适用
 - BodyAndHair 不能用 Face 的纯 `TEXTURE2D` 声明 → 与主 Pass 冲突 → 用 `sampler2D`/`tex2D` 旧语法
+
+---
+
+### 修复硬边处描边断裂（平滑法线 + 面积权重）
+
+**问题**：角色硬边处（肩膀、腿部等）描边出现断裂/缺口。同一位置存在多个顶点（各自独立法线），Cull Front 外扩时各顶点沿各自法线方向走 → 硬边处张开。
+
+**解决方案**：烘焙平滑法线脚本 `NahidaSmoothNormal.cs`
+
+```
+原理：
+  同位置多顶点 → 加权平均法线 → 存入 mesh.uv3 (TEXCOORD2)
+  Outline Pass 读取 v.texcoord2.xyz 替代 v.normal.xyz 作为外扩方向
+```
+
+**失败的尝试**：
+
+| 存储通道 | 问题 |
+|---|---|
+| `mesh.tangents` | 覆盖了 TBN 矩阵的 tangent，主渲染法线贴图崩溃（布料出现三角形块）|
+| `mesh.colors` | GPU 端 Color 通道是 UNORM 格式，负数被截断为 0，方向完全错误 |
+| `mesh.SetUVs(1, Vector3)` | 格式不兼容，TEXCOORD1 无数据 |
+
+**最终方案**：`mesh.SetUVs(2, Vector4)` → UV3 通道 → Shader 读 `TEXCOORD2`
+
+- `Vector4` 格式天然支持负数，不需要编解码
+- UV3 通道不影响主渲染的 TBN 矩阵
+- **面积权重**（`useAreaWeight`）：大三角面对平滑方向贡献更大，小面影响小，结果更自然
+- Face.shader **不用平滑法线**（`v.normal.xyz`），因为嘴巴凹陷处平滑后会出错
+
+**使用**：脚本挂到 SkinnedMeshRenderer 所在 GameObject，Play 时 Awake 自动执行。也可右键 → "执行平滑" 手动触发。
