@@ -504,6 +504,9 @@ Shader "Unlit/BodyAndHair"
                 color = lerp(color, _OutlineMapColor0,
                              step(ilm.a, (matEnum0 + matEnum1) / 2));
 
+                // 描边色 Alpha=0 → 丢弃像素（薄面材质设 a=0 可消除全黑）
+                clip(color.a - 0.01);
+
                 float4 col = float4(color.rgb, 1);
                 col.rgb = MixFog(col.rgb, i.fogCoord);
                 return col;
