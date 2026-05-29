@@ -32,7 +32,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: :m_CustomRenderQueue
+  m_LockedProperties: :m_CustomRenderQueue _OutlineMapColor3
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -147,7 +147,7 @@ Material:
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
-    - _OutlineOffset: 0
+    - _OutlineOffset: 0.002
     - _Parallax: 0.02
     - _QueueOffset: 0
     - _RampMapRow0: 1

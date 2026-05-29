@@ -248,7 +248,10 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 5717591660693952141, guid: 2ccec3e5948594526b12b6f1e4490d7c, type: 3}
       insertIndex: -1
       addedObject: {fileID: 150893259}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1474997397395133549, guid: 2ccec3e5948594526b12b6f1e4490d7c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1033344609}
   m_SourcePrefab: {fileID: 100100000, guid: 2ccec3e5948594526b12b6f1e4490d7c, type: 3}
 --- !u!4 &68059299 stripped
 Transform:
@@ -630,6 +633,24 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1033344607 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1474997397395133549, guid: 2ccec3e5948594526b12b6f1e4490d7c, type: 3}
+  m_PrefabInstance: {fileID: 68059298}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1033344609
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1033344607}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c229fc6e5b9b34a05b7c152649c74a57, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NahidaSmoothNormal
+  useAreaWeight: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
