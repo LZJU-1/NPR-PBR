@@ -475,7 +475,7 @@ Shader "Unlit/BodyAndHair"
 
                 // 沿法线外扩顶点（备选：v.tangent.xyz 用于头发）
                 VertexPositionInputs vertexInput = GetVertexPositionInputs(
-                    v.vertex.xyz + v.normal.xyz * _OutlineOffset);
+                    v.vertex.xyz + v.color.rgb * _OutlineOffset);
 
                 o.uv         = TRANSFORM_TEX(v.uv, _BaseTex);
                 o.positionCS = vertexInput.positionCS;

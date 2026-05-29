@@ -420,12 +420,12 @@ Shader "Unlit/Face"
                 float  _OutlineOffset;  // 外扩距离（模型空间单位），越大描边越粗
             CBUFFER_END
 
-            // 顶点着色器输入：位置 + 法线用于外扩方向
             struct Attributes
             {
-                float4 vertex : POSITION;  // 模型空间顶点坐标
-                float2 uv     : TEXCOORD0; // UV（本 Pass 未使用，保留兼容性）
-                float3 normal : NORMAL;    // 模型空间法线，决定外扩方向
+                float4 vertex : POSITION;
+                float2 uv     : TEXCOORD0;
+                float3 normal : NORMAL;
+                float4 color  : COLOR0;    // 烘焙的平滑法线 (rgb)
             };
 
             // 顶点着色器输出 → 片元着色器输入
@@ -447,7 +447,7 @@ Shader "Unlit/Face"
                 // 模型空间法线 × 外扩距离 = 偏移量
                 // 对于球体：所有顶点沿径向（=法线方向）均匀外扩
                 // 对于角色：软边缘处法线平滑，描边连续；硬边处可能断裂
-                float3 offset = v.normal.xyz * _OutlineOffset;
+                float3 offset = v.color.rgb * _OutlineOffset;
                 VertexPositionInputs posInput = GetVertexPositionInputs(
                     v.vertex.xyz + offset);
 
