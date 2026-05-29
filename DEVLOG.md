@@ -96,4 +96,42 @@ SubShader
 - `_OutlineColor` alpha 初始为 0 → 描边完全透明，看不出效果
 - `_OutlineOffset` 材质旧值 0.000015 覆盖了 Shader 默认 0.0003 → 描边太细
 - 尝试加 `LightMode = "SRPDefaultUnlit"` 导致 Pass 不渲染
-- BodyAndHair 的 ILM 多色描边暂未启用（`sampler2D` 跨 Pass 冲突）
+
+---
+
+### 实现 BodyAndHair 描边（ILM.a 多色 + clip 遮罩）
+
+**实现方式**：参考教程，在 BodyAndHair.shader 末尾添加 DrawOutline Pass。
+
+**与 Face.shader 描边的关键区别**：
+
+| | Face | BodyAndHair |
+|---|---|---|
+| 描边颜色 | 单色 `_OutlineColor` | 5 色 `_OutlineMapColor0~4` |
+| 颜色选择 | 固定 | ILM.a 通道 → 材质类型枚举 → 级联 lerp |
+| 纹理依赖 | 无 | `_ILM`（A 通道）、`_BaseTex`（UV 变换） |
+| 语法 | URP `TEXTURE2D`/`SAMPLER` | CG `sampler2D`/`tex2D`（避免跨 Pass 冲突） |
+
+**ILM.a → 描边颜色映射逻辑**：
+
+```
+ilm.a ∈ [0.00, 0.15) → _OutlineMapColor0
+ilm.a ∈ [0.15, 0.40) → _OutlineMapColor1
+ilm.a ∈ [0.40, 0.60) → _OutlineMapColor2
+ilm.a ∈ [0.60, 0.85) → _OutlineMapColor3
+ilm.a ∈ [0.85, 1.00] → _OutlineMapColor4
+```
+
+与主 Pass 的 Ramp 行选择使用完全相同的级联 lerp 逻辑。
+
+**薄面（裙摆）全黑问题的解决**：
+
+- **现象**：裙摆下方整块黑色，不是细描边线
+- **原因**：裙摆是单层面片（2D 薄面），Cull Front 膨胀后整张背面都可见，不像实体体积会被自身遮挡
+- **解决**：在片元着色器添加 `clip(color.a - 0.01)`，将裙摆材质对应的 `_OutlineMapColor` 的 Alpha 设为 0 → 片元被丢弃 → 不画描边
+
+**踩坑记录**：
+- 材质 `_OutlineOffset` 被旧值 `0.000015` 覆盖 → 描边肉眼不可见 → 改为 `0.002`
+- 尝试 `v.color.r` 顶点色控制外扩 → 无效（模型未存储该数据）
+- 尝试 `v.tangent` 外扩 → 方向不对称，脸部不适用
+- BodyAndHair 不能用 Face 的纯 `TEXTURE2D` 声明 → 与主 Pass 冲突 → 用 `sampler2D`/`tex2D` 旧语法
