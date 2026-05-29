@@ -46,6 +46,10 @@ Shader "Unlit/Face"
         _DoubleSided ("Double Sided", Range(0, 1)) = 0
         _Alpha ("Alpha", Range(0, 1)) = 1
 
+        _RimColor   ("Rim Color",   Color) = (1, 1, 1, 1)
+        _RimPower   ("Rim Power",   Range(0.1, 10)) = 4
+        _RimIntensity ("Rim Intensity", Range(0, 2)) = 0.3
+
         // ---- 描边（背面膨胀法 / Inverted Hull Outline）----
         // _OutlineColor:  描边颜色，RGBA 的 A 必须 = 1 否则透明不可见
         // _OutlineOffset: 顶点沿法线外扩距离（模型空间单位），值越大描边越粗
@@ -166,6 +170,8 @@ Shader "Unlit/Face"
                 float  _DoubleSided, _Alpha;
                 float  _RampRow;
                 float  _OutlineOffset;
+                float4 _RimColor;
+                float  _RimPower, _RimIntensity;
                 float3 _ForwardVector, _RightVector;
             CBUFFER_END
 
@@ -227,6 +233,8 @@ Shader "Unlit/Face"
                 // ---- 光照方向向量 ----
                 float3 N = normalize(input.normalWS);
                 float3 L = normalize(light.direction);
+                float3 V = normalize(mul((float3x3)UNITY_MATRIX_I_V, input.positionVS * (-1.0)));
+                float  NoV = dot(N, V);
 
                 // ---- MatCap UV（用于 ToonTex 采样）----
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
@@ -336,6 +344,11 @@ Shader "Unlit/Face"
                 // ====================================================
                 float3 shadowColor = baseColor * rampColor * _ShadowColor.rgb;
                 float3 diffuse     = lerp(shadowColor, baseColor, sdf);
+
+                // ---- 边缘光（菲涅尔）----
+                float fresnel = 1.0 - saturate(NoV);
+                fresnel = pow(fresnel, _RimPower);
+                diffuse += fresnel * _RimIntensity * _RimColor.rgb;
 
                 float alpha = _Alpha * baseTex.a * toonTex.a * sphereTex.a;
                 alpha = saturate(min(max(isFacing, _DoubleSided), alpha));

@@ -53,6 +53,10 @@ Shader "Unlit/BodyAndHair"
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
 
+        _RimColor   ("Rim Color",   Color) = (1, 1, 1, 1)
+        _RimPower   ("Rim Power",   Range(0.1, 10)) = 4
+        _RimIntensity ("Rim Intensity", Range(0, 2)) = 0.3
+
         // ---- 描边 ----
         // _OutlineOffset: 沿法线外扩距离
         // _OutlineMapColor0~4: 5 种 ILM 材质类型的描边颜色，由 ILM.a 选择
@@ -177,6 +181,8 @@ Shader "Unlit/BodyAndHair"
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
+                float4 _RimColor;
+                float  _RimPower, _RimIntensity;
             CBUFFER_END
 
             // 贴图与采样器 — 与 Properties 块一一对应
@@ -255,6 +261,7 @@ Shader "Unlit/BodyAndHair"
 
                 float NoL = dot(N, L);
                 float NoH = dot(N, H);
+                float NoV = dot(N, V);
 
                 // ---- MatCap UV ----
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
@@ -397,6 +404,11 @@ Shader "Unlit/BodyAndHair"
                 // 6. 合成
                 // ====================================================
                 float3 albedo = diffuse + specular + metallic;
+
+                // ---- 边缘光（菲涅尔）----
+                float fresnel = 1.0 - saturate(NoV);
+                fresnel = pow(fresnel, _RimPower);
+                albedo += fresnel * _RimIntensity * _RimColor.rgb;
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
