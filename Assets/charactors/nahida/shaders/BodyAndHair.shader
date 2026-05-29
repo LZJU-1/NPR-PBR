@@ -54,9 +54,12 @@ Shader "Unlit/BodyAndHair"
         _Alpha        ("Alpha",         Range(0, 1)) = 1
 
         // ---- 边缘光（菲涅尔）----
-        _RimColor     ("Rim Color",     Color) = (1, 1, 1, 1)
-        _RimPower     ("Rim Power",     Range(0.1, 10)) = 4
-        _RimIntensity ("Rim Intensity", Range(0, 2)) = 0.3
+        _RimColor         ("Rim Color",          Color) = (1, 1, 1, 1)
+        _RimOffset        ("Rim Offset",         Range(1, 20))  = 6
+        _RimThreshold     ("Rim Threshold",      Range(0, 0.5))  = 0.02
+        _RimIntensity     ("Rim Intensity",      Range(0, 2))    = 0.3
+        _RimFresnelPower  ("Rim Fresnel Power",  Range(1, 20))   = 6
+        _RimFresnelClamp  ("Rim Fresnel Clamp",  Range(0, 1))    = 0.8
 
         // ---- 描边 ----
         // _OutlineOffset: 沿法线外扩距离
@@ -183,7 +186,8 @@ Shader "Unlit/BodyAndHair"
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
                 float4 _RimColor;
-                float  _RimPower, _RimIntensity;
+                float  _RimOffset, _RimThreshold, _RimIntensity;
+                float  _RimFresnelPower, _RimFresnelClamp;
             CBUFFER_END
 
             // 贴图与采样器 — 与 Properties 块一一对应
@@ -404,10 +408,21 @@ Shader "Unlit/BodyAndHair"
                 // ====================================================
                 // 6. 合成
                 // ====================================================
-                // ---- 边缘光（菲涅尔）----
+                // ---- 边缘光（四方向深度差 + 菲涅尔）----
+                float2 screenUV  = input.positionNDC.xy;
+                float  dC = LinearEyeDepth(SampleSceneDepth(screenUV), _ZBufferParams);
+                float  step = _RimOffset / _ScreenParams.x;
+                float  dU = LinearEyeDepth(SampleSceneDepth(screenUV + float2(0, step)), _ZBufferParams);
+                float  dD = LinearEyeDepth(SampleSceneDepth(screenUV - float2(0, step)), _ZBufferParams);
+                float  dL = LinearEyeDepth(SampleSceneDepth(screenUV - float2(step, 0)), _ZBufferParams);
+                float  dR = LinearEyeDepth(SampleSceneDepth(screenUV + float2(step, 0)), _ZBufferParams);
+                float  rim = max(max(dU - dC, dD - dC), max(dL - dC, dR - dC));
+                rim = smoothstep(_RimThreshold * 0.5, _RimThreshold, saturate(rim));
+                rim *= _RimIntensity;
                 float fresnel = 1.0 - saturate(NoV);
-                fresnel = pow(fresnel, _RimPower);
-                float3 albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
+                fresnel = pow(fresnel, _RimFresnelPower);
+                fresnel = fresnel * _RimFresnelClamp + (1.0 - _RimFresnelClamp);
+                float3 albedo = diffuse + specular + metallic + rim * fresnel * _RimColor.rgb;
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
