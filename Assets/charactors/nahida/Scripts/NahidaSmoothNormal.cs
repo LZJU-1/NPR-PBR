@@ -22,6 +22,8 @@ public class NahidaSmoothNormal : MonoBehaviour
     /// 在 Edit Mode 下右键脚本组件执行，不需要进 Play Mode
     /// </summary>
     [ContextMenu("执行平滑")]
+
+    private void Awake() { SmoothAndBake(); }
     public void SmoothAndBake()
     {
         var rend = GetComponent<SkinnedMeshRenderer>();
