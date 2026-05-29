@@ -167,8 +167,7 @@ Shader "Unlit/Face"
                 float  _RampRow;
                 float  _OutlineOffset;
                 float4 _RimColor;
-                float  _RimOffset, _RimThreshold, _RimIntensity;
-                float  _RimFresnelPower, _RimFresnelClamp;
+                float  _RimPower, _RimIntensity;
                 float3 _ForwardVector, _RightVector;
             CBUFFER_END
 
@@ -342,21 +341,10 @@ Shader "Unlit/Face"
                 float3 shadowColor = baseColor * rampColor * _ShadowColor.rgb;
                 float3 diffuse     = lerp(shadowColor, baseColor, sdf);
 
-                // ---- 边缘光（四方向深度差 + 菲涅尔）----
-                float2 screenUV  = input.positionNDC.xy;
-                float  dC = LinearEyeDepth(SampleSceneDepth(screenUV), _ZBufferParams);
-                float  step = _RimOffset / _ScreenParams.x;
-                float  dU = LinearEyeDepth(SampleSceneDepth(screenUV + float2(0, step)), _ZBufferParams);
-                float  dD = LinearEyeDepth(SampleSceneDepth(screenUV - float2(0, step)), _ZBufferParams);
-                float  dL = LinearEyeDepth(SampleSceneDepth(screenUV - float2(step, 0)), _ZBufferParams);
-                float  dR = LinearEyeDepth(SampleSceneDepth(screenUV + float2(step, 0)), _ZBufferParams);
-                float  rim = max(max(dU - dC, dD - dC), max(dL - dC, dR - dC));
-                rim = smoothstep(_RimThreshold * 0.5, _RimThreshold, saturate(rim));
-                rim *= _RimIntensity;
+                // ---- 边缘光（菲涅尔）----
                 float fresnel = 1.0 - saturate(NoV);
-                fresnel = pow(fresnel, _RimFresnelPower);
-                fresnel = fresnel * _RimFresnelClamp + (1.0 - _RimFresnelClamp);
-                diffuse += rim * fresnel * _RimColor.rgb;
+                fresnel = pow(fresnel, _RimPower);
+                diffuse += fresnel * _RimIntensity * _RimColor.rgb;
 
                 float alpha = _Alpha * baseTex.a * toonTex.a * sphereTex.a;
                 alpha = saturate(min(max(isFacing, _DoubleSided), alpha));
