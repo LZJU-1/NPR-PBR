@@ -1,86 +1,66 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-/// <summary>
-/// 屏幕分割线控制器 — 鼠标拖拽旋转和平移分割线。
-/// 分割线一侧显示 NPR，另一侧显示 PBR（当前均为 NPR 测试）。
-///
-/// 操作：
-///   左键拖拽 → 旋转分割线
-///   右键拖拽 → 平移分割线
-///   鼠标滚轮 → 缩放
-///   R 键 → 重置
-/// </summary>
 public class SplitScreenController : MonoBehaviour
 {
-    [Header("分割线参数")]
-    [Range(-1f, 1f)] public float lineOffset = 0f;   // 分割线偏离屏幕中心的距离
-    [Range(0f, 360f)] public float lineAngle  = 0f;    // 分割线旋转角度
+    [Range(-1f, 1f)] public float lineOffset  = 0f;
+    [Range(0f, 360f)] public float lineAngle  = 0f;
+    public Color lineColor = Color.white;
+    public float lineThickness = 3f;
 
-    [Header("显示")]
-    public Material splitMaterial; // 全屏分割合成材质
-
-    private bool  _dragging;
-    private bool  _rotating;
+    private bool _rotating, _panning;
     private float _lastMouseX;
 
     void Update()
     {
-        HandleInput();
+        var m = Mouse.current;
+        var k = Keyboard.current;
+        if (m == null) return;
 
-        // 传入 Shader（用全局参数，SplitScreenRendererFeature 读取）
-        float rad = lineAngle * Mathf.Deg2Rad;
-        Vector2 lineDir = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
-        Shader.SetGlobalFloat("_SplitLineOffset", lineOffset);
-        Shader.SetGlobalVector("_SplitLineDir", lineDir);
-    }
+        if (k != null && k.rKey.wasPressedThisFrame) { lineOffset = 0; lineAngle = 0; }
 
-    void HandleInput()
-    {
-        // R 键重置
-        if (Input.GetKeyDown(KeyCode.R))
-        {
-            lineOffset = 0f;
-            lineAngle = 0f;
-        }
-
-        // 滚轮缩放（效果等同于调线宽度）
-        if (Input.mouseScrollDelta.y != 0)
-        {
-            // 预留
-        }
-
-        // 左键拖拽 = 旋转
-        if (Input.GetMouseButtonDown(0)) { _rotating = true; _lastMouseX = Input.mousePosition.x; }
-        if (Input.GetMouseButtonUp(0))   { _rotating = false; }
-
-        // 右键拖拽 = 平移
-        if (Input.GetMouseButtonDown(1)) { _dragging = true; _lastMouseX = Input.mousePosition.x; }
-        if (Input.GetMouseButtonUp(1))   { _dragging = false; }
+        if (m.leftButton.wasPressedThisFrame)  { _rotating = true;  _lastMouseX = m.position.x.ReadValue(); }
+        if (m.leftButton.wasReleasedThisFrame) { _rotating = false; }
+        if (m.rightButton.wasPressedThisFrame)  { _panning = true;  _lastMouseX = m.position.x.ReadValue(); }
+        if (m.rightButton.wasReleasedThisFrame) { _panning = false; }
 
         if (_rotating)
         {
-            float dx = Input.mousePosition.x - _lastMouseX;
+            float dx = m.position.x.ReadValue() - _lastMouseX;
             lineAngle += dx * 0.3f;
-            if (lineAngle < 0f) lineAngle += 360f;
-            if (lineAngle > 360f) lineAngle -= 360f;
-            _lastMouseX = Input.mousePosition.x;
+            if (lineAngle < 0) lineAngle += 360; else if (lineAngle > 360) lineAngle -= 360;
+            _lastMouseX = m.position.x.ReadValue();
         }
-
-        if (_dragging)
+        if (_panning)
         {
-            float dx = Input.mousePosition.x - _lastMouseX;
-            lineOffset += dx / Screen.width * 2f;
-            lineOffset = Mathf.Clamp(lineOffset, -1f, 1f);
-            _lastMouseX = Input.mousePosition.x;
+            float dx = m.position.x.ReadValue() - _lastMouseX;
+            lineOffset = Mathf.Clamp(lineOffset + dx / Screen.width * 2f, -1f, 1f);
+            _lastMouseX = m.position.x.ReadValue();
         }
     }
 
     void OnGUI()
     {
-        // 简单的提示
-        GUILayout.BeginArea(new Rect(10, 10, 300, 100));
-        GUILayout.Label($"分割线角度: {lineAngle:F0}°  偏移: {lineOffset:F2}");
-        GUILayout.Label("左键拖拽=旋转 | 右键拖拽=平移 | R=重置");
+        float rad = lineAngle * Mathf.Deg2Rad;
+        Vector2 dir = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
+        float cx = Screen.width * 0.5f;
+        float cy = Screen.height * 0.5f;
+        float offsetPx = lineOffset * Screen.width * 0.5f;
+        Vector2 center = new Vector2(cx, cy) + dir * offsetPx;
+        float length = Screen.height * 2f;
+        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+        var prevColor = GUI.color;
+        GUI.color = lineColor;
+        var oldMatrix = GUI.matrix;
+        GUIUtility.RotateAroundPivot(angle, center);
+        GUI.DrawTexture(new Rect(center.x - length * 0.5f, center.y - lineThickness * 0.5f, length, lineThickness), Texture2D.whiteTexture);
+        GUI.matrix = oldMatrix;
+        GUI.color = prevColor;
+
+        GUILayout.BeginArea(new Rect(10, 10, 280, 50));
+        GUILayout.Box(string.Format("Angle: {0:F0}  Offset: {1:F2}", lineAngle, lineOffset));
+        GUILayout.Label("Left-drag: Rotate | Right-drag: Pan | R: Reset");
         GUILayout.EndArea();
     }
 }
