@@ -60,7 +60,7 @@ Shader "NPR/SplitScreen"
             float side = dot(screenPos, _SplitLineDir) - _SplitLineOffset;
 
             // 分割线附近的平滑过渡
-            float line = 1.0 - smoothstep(0, _LineWidth, abs(side));
+            float lineMask = 1.0 - smoothstep(0, _LineWidth, abs(side));
 
             // 当前仅采样同一张 RT（NPR），PBR 模式后替换
             float4 baseColor = SAMPLE_TEXTURE2D(_BlitTexture, sampler_BlitTexture, input.uv);
@@ -72,7 +72,7 @@ Shader "NPR/SplitScreen"
             float3 color = side > 0 ? nprColor : pbrColor;
 
             // 画分割线
-            color = lerp(color, _LineColor.rgb, line);
+            color = lerp(color, _LineColor.rgb, lineMask);
 
             return float4(color, 1);
         }
