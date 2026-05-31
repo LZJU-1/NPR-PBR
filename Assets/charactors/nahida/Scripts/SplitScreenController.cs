@@ -46,8 +46,9 @@ public class SplitScreenController : MonoBehaviour
         float cx = Screen.width * 0.5f;
         float cy = Screen.height * 0.5f;
         float offsetPx = lineOffset * Screen.width * 0.5f;
-        Vector2 center = new Vector2(cx, cy) + dir * offsetPx;
-        float length = Screen.height * 2f;
+        Vector2 perpDir = new Vector2(-dir.y, dir.x);
+        Vector2 center = new Vector2(cx, cy) + perpDir * offsetPx;
+        float length = Mathf.Sqrt(Screen.width * Screen.width + Screen.height * Screen.height) * 2f;
         float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
 
         var prevColor = GUI.color;
