@@ -52,6 +52,7 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
+        _PBRMode      ("PBR Mode",       Range(0, 1)) = 0
 
         // ---- 边缘光（菲涅尔）----
         _RimColor     ("Rim Color",     Color) = (1, 1, 1, 1)
@@ -178,7 +179,7 @@ Shader "Unlit/BodyAndHair"
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
-                float  _DoubleSided, _Alpha;
+                float  _DoubleSided, _Alpha, _PBRMode;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -407,7 +408,34 @@ Shader "Unlit/BodyAndHair"
                 // ---- 边缘光（菲涅尔）----
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
-                float3 albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
+                float3 albedo;
+                if (_PBRMode > 0.5)
+                {
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = input.positionWS;
+                    inputData.normalWS = N;
+                    inputData.viewDirectionWS = SafeNormalize(V);
+                    inputData.shadowCoord = input.shadowCoord;
+                    inputData.fogCoord = 0;
+                    inputData.vertexLighting = half3(0,0,0);
+                    inputData.bakedGI = SampleSH(N);
+                    inputData.normalizedScreenSpaceUV = input.positionNDC.xy;
+                    inputData.shadowMask = half4(1,1,1,1);
+
+                    SurfaceData surfaceData = (SurfaceData)0;
+                    surfaceData.albedo = baseTex.rgb;
+                    surfaceData.metallic = ilm.r;
+                    surfaceData.smoothness = 1.0 - ilm.g;
+                    surfaceData.occlusion = ilm.b;
+                    surfaceData.alpha = 1;
+                    surfaceData.normalTS = float3(0,0,1);
+
+                    albedo = UniversalFragmentPBR(inputData, surfaceData);
+                }
+                else
+                {
+                    albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
+                }
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
