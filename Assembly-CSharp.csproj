@@ -59,6 +59,7 @@
     <None Include="Assets/charactors/nahida/shaders/Face.shader" />
     <None Include="Assets/charactors/nahida/shaders/SplitScreen.shader" />
     <None Include="Assets/charactors/nahida/shaders/BodyAndHair.shader" />
+    <None Include="Assets/charactors/nahida/shaders/BodyAndHairPBR.shader" />
     <None Include="Assets/charactors/nahida/others/纳西妲.MMD4Mecanim.xml" />
     <None Include="Assets/charactors/nahida/others/纳西妲.xml" />
   </ItemGroup>

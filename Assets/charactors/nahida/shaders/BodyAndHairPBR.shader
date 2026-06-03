@@ -1,4 +1,4 @@
-Shader "Unlit/BodyAndHair"
+Shader "NPR/BodyAndHairPBR"
 {
     Properties
     {
@@ -407,7 +407,30 @@ Shader "Unlit/BodyAndHair"
                 // ---- 边缘光（菲涅尔）----
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
-                float3 albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
+                InputData inputData = (InputData)0;
+                inputData.positionWS = input.positionWS;
+                inputData.normalWS = N;
+                inputData.viewDirectionWS = SafeNormalize(V);
+                inputData.shadowCoord = input.shadowCoord;
+                inputData.fogCoord = input.fogCoord;
+                inputData.vertexLighting = half3(0, 0, 0);
+                inputData.bakedGI = SampleSH(N);
+                inputData.normalizedScreenSpaceUV = input.positionNDC.xy;
+                inputData.shadowMask = half4(1, 1, 1, 1);
+
+                SurfaceData surfaceData = (SurfaceData)0;
+                surfaceData.albedo     = baseTex.rgb;
+                surfaceData.metallic   = ilm.r;
+                surfaceData.smoothness = ilm.g;
+                surfaceData.occlusion  = ilm.b;
+                surfaceData.alpha      = 1.0;
+                surfaceData.specular   = 0.5;
+                surfaceData.normalTS   = normalTS;
+                surfaceData.emission   = 0;
+
+                float3 albedo = UniversalFragmentPBR(inputData, surfaceData);
+                float rimFresnel = 1.0 - saturate(NoV);
+                albedo += pow(rimFresnel, _RimPower) * _RimIntensity * _RimColor.rgb;
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
