@@ -52,6 +52,7 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
+        [Toggle] _PBRMODE ("PBR Mode", Float) = 0
 
         // ---- 边缘光（菲涅尔）----
         _RimColor     ("Rim Color",     Color) = (1, 1, 1, 1)
@@ -139,6 +140,7 @@ Shader "Unlit/BodyAndHair"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _SHADOWS_SOFT
             #pragma multi_compile_fog
+            #pragma shader_feature _PBR_MODE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -178,7 +180,7 @@ Shader "Unlit/BodyAndHair"
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
-                float  _DoubleSided, _Alpha;
+                float  _DoubleSided, _Alpha, _PBRMODE;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -407,7 +409,42 @@ Shader "Unlit/BodyAndHair"
                 // ---- 边缘光（菲涅尔）----
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
-                float3 albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
+                float3 albedo;
+                #ifdef _PBR_MODE
+                    // ---- PBR 路径（终末地风格：PBR质感 + NPR亮度）----
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = input.positionWS;
+                    inputData.normalWS = N;
+                    inputData.viewDirectionWS = SafeNormalize(V);
+                    inputData.shadowCoord = input.shadowCoord;
+                    inputData.fogCoord = input.fogCoord;
+                    inputData.vertexLighting = half3(0, 0, 0);
+                    inputData.bakedGI = SampleSH(N);
+                    inputData.normalizedScreenSpaceUV = input.positionNDC.xy;
+                    inputData.shadowMask = half4(1, 1, 1, 1);
+
+                    SurfaceData surfaceData = (SurfaceData)0;
+                    surfaceData.albedo     = baseTex.rgb;
+                    surfaceData.metallic   = ilm.r;           // ILM R → 金属度
+                    surfaceData.smoothness = ilm.g;           // ILM G → 光滑度
+                    surfaceData.occlusion  = ilm.b;           // ILM B → AO
+                    surfaceData.alpha      = 1.0;
+                    surfaceData.specular   = 0.5;
+                    surfaceData.normalTS   = normalTS;
+                    surfaceData.emission   = 0;
+
+                    albedo = UniversalFragmentPBR(inputData, surfaceData);
+
+                    // 环境补光：保持 NPR 的明亮感
+                    albedo += _AmbientColor.rgb * 0.3 * baseTex.rgb;
+
+                    // 边缘光
+                    float rimF = 1.0 - saturate(NoV);
+                    albedo += pow(rimF, _RimPower) * _RimIntensity * _RimColor.rgb;
+                #else
+                    // ---- NPR 路径 ----
+                    albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
+                #endif
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
@@ -448,6 +485,7 @@ Shader "Unlit/BodyAndHair"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
+            #pragma shader_feature _PBR_MODE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
