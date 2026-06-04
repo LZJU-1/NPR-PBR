@@ -411,7 +411,6 @@ Shader "Unlit/BodyAndHair"
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
                 #ifdef _PBRMODE
-                    // ---- PBR 路径（终末地风格：GGX BRDF + 环境补光）----
                     BRDFData brdfData;
                     float3 specColor = lerp(0.04, baseTex.rgb, ilm.r);
                     float oneMinusReflectivity = OneMinusReflectivityMetallic(ilm.r);
