@@ -177,13 +177,15 @@ Shader "Unlit/BodyAndHair"
             // ------------------------------------------------------------
             // Material 属性常量缓冲区
             // ------------------------------------------------------------
+
+            // 分割线参数（C# 全局写入）
+            float _SplitLineOffset;
+            float2 _SplitLineDir;
             CBUFFER_START(UnityPerMaterial)
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
                 float  _DoubleSided, _Alpha, _PBRMode;
-                float  _SplitLineOffset;
-                float2 _SplitLineDir;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -413,16 +415,18 @@ Shader "Unlit/BodyAndHair"
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
-                // 分割线判定：屏幕空间像素在哪一侧 → NPR or PBR
+                // 分割线：splitSide>0=NPR，else=PBR
                 float2 screenPos = input.positionNDC.xy;
                 float splitSide = dot(screenPos, _SplitLineDir) - _SplitLineOffset;
-                if (splitSide > 0)
+                bool hasLine = abs(_SplitLineDir.x) + abs(_SplitLineDir.y) > 0.001;
+                if (!hasLine || splitSide > 0.0)
                 {
-                    albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb; // NPR 侧
+                    // ---- NPR 侧 ----
+                    albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
                 }
                 else
                 {
-                    // PBR 侧
+                    // ---- PBR 侧 ----
                     InputData inputData = (InputData)0;
                     inputData.positionWS = input.positionWS;
                     inputData.normalWS = N;
@@ -508,6 +512,10 @@ Shader "Unlit/BodyAndHair"
             };
 
             // 使用 sampler2D 旧语法避免与主 Pass 的 TEXTURE2D/SAMPLER 冲突
+
+            // 分割线参数（C# 全局写入）
+            float _SplitLineOffset;
+            float2 _SplitLineDir;
             CBUFFER_START(UnityPerMaterial)
                 sampler2D _BaseTex;
                 float4    _BaseTex_ST;
