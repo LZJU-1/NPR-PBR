@@ -182,6 +182,8 @@ Shader "Unlit/BodyAndHair"
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
                 float  _DoubleSided, _Alpha, _PBRMode;
+                float  _SplitLineOffset;
+                float2 _SplitLineDir;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -411,8 +413,16 @@ Shader "Unlit/BodyAndHair"
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
-                if (_PBRMode > 0.5)
+                // 分割线判定：屏幕空间像素在哪一侧 → NPR or PBR
+                float2 screenPos = input.positionNDC.xy;
+                float splitSide = dot(screenPos, _SplitLineDir) - _SplitLineOffset;
+                if (splitSide > 0)
                 {
+                    albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb; // NPR 侧
+                }
+                else
+                {
+                    // PBR 侧
                     InputData inputData = (InputData)0;
                     inputData.positionWS = input.positionWS;
                     inputData.normalWS = N;
@@ -436,10 +446,6 @@ Shader "Unlit/BodyAndHair"
                     albedo += _AmbientColor.rgb * 0.5 * baseTex.rgb;
                     float rimF = 1.0 - saturate(NoV);
                     albedo += pow(rimF, _RimPower) * _RimIntensity * _RimColor.rgb;
-                }
-                else
-                {
-                    albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
                 }
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
