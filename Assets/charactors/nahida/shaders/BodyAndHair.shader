@@ -417,10 +417,15 @@ Shader "Unlit/BodyAndHair"
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
                 // 分割线：splitSide>0=NPR，else=PBR
-                float2 screenPos = input.positionNDC.xy;
-                float splitSide = dot(screenPos, float2(_SplitLineDirX, _SplitLineDirY)) - _SplitLineOffset;
-                bool hasLine = abs(_SplitLineDirX) + abs(_SplitLineDirY) > 0.001;
-                if (!hasLine || splitSide > 0.0)
+                // 分割线（NDC→像素空间严格推导）
+                // OnGUI 线: dot(pixelPos-center, perp) = offsetPx
+                // 代入 pixelPos = f(posNDC) 解得:
+                float2 posNDC = input.positionNDC.xy;
+                float aspect = _ScreenParams.x / _ScreenParams.y;
+                float splitSide = -_SplitLineDirY * posNDC.x
+                                - _SplitLineDirX * posNDC.y / aspect
+                                - _SplitLineOffset;
+                if (splitSide > 0.0)
                 {
                     // ---- NPR 侧 ----
                     albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
