@@ -44,27 +44,6 @@ public class SplitScreenController : MonoBehaviour
 
     void OnGUI()
     {
-        float rad = lineAngle * Mathf.Deg2Rad;
-        Vector2 dir = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
-        Vector2 perp = new Vector2(-dir.y, dir.x);
-
-        float cx = Screen.width * 0.5f;
-        float cy = Screen.height * 0.5f;
-        float offsetPx = lineOffset * Screen.width * 0.5f;
-
-        // 中心 = 屏幕中心 + 垂直偏移
-        Vector2 center = new Vector2(cx, cy) + perp * offsetPx;
-        float length = Mathf.Sqrt(Screen.width * Screen.width + Screen.height * Screen.height) * 2f;
-        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-
-        var prev = GUI.color;
-        GUI.color = lineColor;
-        var oldMat = GUI.matrix;
-        GUIUtility.RotateAroundPivot(angle, center);
-        GUI.DrawTexture(new Rect(center.x - length * 0.5f, center.y - lineThickness * 0.5f, length, lineThickness), Texture2D.whiteTexture);
-        GUI.matrix = oldMat;
-        GUI.color = prev;
-
         GUILayout.BeginArea(new Rect(10, 10, 280, 50));
         GUILayout.Box(string.Format("Angle: {0:F0}  Offset: {1:F2}", lineAngle, lineOffset));
         GUILayout.Label("Left-drag: Rotate | Right-drag: Pan | R: Reset");

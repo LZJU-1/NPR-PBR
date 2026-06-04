@@ -52,6 +52,8 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
+        _PBRMetallicScale  ("PBR Metallic Scale",  Range(0, 1)) = 0.3
+        _PBRSmoothnessScale ("PBR Smoothness Scale", Range(0, 1)) = 0.5
         _PBRMode      ("PBR Mode",       Range(0, 1)) = 0
 
         // ---- 边缘光（菲涅尔）----
