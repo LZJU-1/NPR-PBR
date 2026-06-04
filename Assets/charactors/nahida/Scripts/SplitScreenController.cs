@@ -47,6 +47,7 @@ public class SplitScreenController : MonoBehaviour
         Shader.SetGlobalFloat("_SplitLineOffset", lineOffset);
         Shader.SetGlobalFloat("_SplitLineDirX", dir.x);
         Shader.SetGlobalFloat("_SplitLineDirY", dir.y);
+        Shader.SetGlobalFloat("_SplitLineOffsetPx", lineOffset * Screen.width * 0.5f);
     }
 
     void OnGUI()

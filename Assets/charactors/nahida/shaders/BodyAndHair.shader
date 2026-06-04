@@ -180,6 +180,7 @@ Shader "Unlit/BodyAndHair"
 
             // 分割线参数（C# 全局写入）
             float _SplitLineOffset;
+            float _SplitLineOffsetPx;
             float _SplitLineDirX;
             float _SplitLineDirY;
             CBUFFER_START(UnityPerMaterial)
@@ -416,15 +417,15 @@ Shader "Unlit/BodyAndHair"
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
-                // 分割线：splitSide>0=NPR，else=PBR
-                // 分割线（NDC→像素空间严格推导）
-                // OnGUI 线: dot(pixelPos-center, perp) = offsetPx
-                // 代入 pixelPos = f(posNDC) 解得:
-                float2 posNDC = input.positionNDC.xy;
-                float aspect = _ScreenParams.x / _ScreenParams.y;
-                float splitSide = -_SplitLineDirY * posNDC.x
-                                - _SplitLineDirX * posNDC.y / aspect
-                                - _SplitLineOffset;
+                // 分割线（使用 URP 官方屏幕坐标函数）
+                float2 screenUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                float2 pixelPos = screenUV * _ScreenParams.xy;
+                pixelPos.y = _ScreenParams.y - pixelPos.y;
+                float2 screenCtr = _ScreenParams.xy * 0.5;
+                float2 dir = float2(_SplitLineDirX, _SplitLineDirY);
+                float2 perp = float2(-dir.y, dir.x);
+                float  offsetPx = _SplitLineOffsetPx;
+                float splitSide = dot(pixelPos - screenCtr, perp) - offsetPx;
                 if (splitSide > 0.0)
                 {
                     // ---- NPR 侧 ----
@@ -521,6 +522,7 @@ Shader "Unlit/BodyAndHair"
 
             // 分割线参数（C# 全局写入）
             float _SplitLineOffset;
+            float _SplitLineOffsetPx;
             float _SplitLineDirX;
             float _SplitLineDirY;
             CBUFFER_START(UnityPerMaterial)
