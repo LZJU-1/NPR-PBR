@@ -180,7 +180,7 @@ Shader "Unlit/BodyAndHair"
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
-                float  _DoubleSided, _Alpha, _PBRMODE;
+                float  _DoubleSided, _Alpha;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -411,32 +411,29 @@ Shader "Unlit/BodyAndHair"
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
                 #ifdef _PBRMODE
-                    // ---- PBR 路径（终末地风格：PBR质感 + NPR亮度）----
-                    InputData inputData = (InputData)0;
-                    inputData.positionWS = input.positionWS;
-                    inputData.normalWS = N;
-                    inputData.viewDirectionWS = SafeNormalize(V);
-                    inputData.shadowCoord = input.shadowCoord;
-                    inputData.fogCoord = input.fogCoord;
-                    inputData.vertexLighting = half3(0, 0, 0);
-                    inputData.bakedGI = SampleSH(N);
-                    inputData.normalizedScreenSpaceUV = input.positionNDC.xy;
-                    inputData.shadowMask = half4(1, 1, 1, 1);
+                    // ---- PBR 路径（终末地风格：GGX BRDF + 环境补光）----
+                    BRDFData brdfData;
+                    float3 specColor = lerp(0.04, baseTex.rgb, ilm.r);
+                    float oneMinusReflectivity = OneMinusReflectivityMetallic(ilm.r);
+                    InitializeBRDFData(baseTex.rgb, ilm.r, specColor, ilm.g, 1.0, brdfData);
 
-                    SurfaceData surfaceData = (SurfaceData)0;
-                    surfaceData.albedo     = baseTex.rgb;
-                    surfaceData.metallic   = ilm.r;           // ILM R → 金属度
-                    surfaceData.smoothness = ilm.g;           // ILM G → 光滑度
-                    surfaceData.occlusion  = ilm.b;           // ILM B → AO
-                    surfaceData.alpha      = 1.0;
-                    surfaceData.specular   = 0.5;
-                    surfaceData.normalTS   = normalTS;
-                    surfaceData.emission   = 0;
+                    // 直接光
+                    Light mainLight = GetMainLight(input.shadowCoord);
+                    float3 directLight = LightingPhysicallyBased(brdfData, mainLight, N, V);
 
-                    albedo = UniversalFragmentPBR(inputData, surfaceData);
+                    // 间接光（天空球GI）
+                    float3 indirectDiffuse  = SampleSH(N);
+                    float3 indirectSpecular = GlossyEnvironmentReflection(
+                        reflect(-V, N), brdfData.perceptualRoughness, 1.0);
+                    float fresnelTerm = Pow4(1.0 - saturate(dot(N, V)));
+                    float3 indirectLight = (indirectDiffuse * brdfData.diffuse
+                        + indirectSpecular * EnvironmentBRDF(brdfData, indirectDiffuse, indirectSpecular, fresnelTerm))
+                        * ilm.b; // AO
+
+                    albedo = directLight + indirectLight;
 
                     // 环境补光：保持 NPR 的明亮感
-                    albedo += _AmbientColor.rgb * 0.3 * baseTex.rgb;
+                    albedo += _AmbientColor.rgb * 0.4 * baseTex.rgb;
 
                     // 边缘光
                     float rimF = 1.0 - saturate(NoV);
