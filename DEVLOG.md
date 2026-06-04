@@ -204,3 +204,19 @@ ilm.a ∈ [0.85, 1.00] → _OutlineMapColor4
 - 薄面 clip 遮罩（`clip(color.a)`）
 - 平滑法线（面积权重，UV3 通道）
 - 纯菲涅尔边缘光
+
+---
+
+### 分割线 NPR/PBR 实时对比工具
+
+**实现方式**：BodyAndHair.shader 的片元着色器中，每像素根据屏幕坐标判断在分割线的哪一侧 → 走 NPR 或 PBR 分支。单相机、单 Pass、不额外渲染。
+
+**关键算法**：
+- `GetNormalizedScreenSpaceUV(input.positionCS)` → 屏幕像素坐标
+- Y 轴翻转为 GUI 方向（top=0），与 OnGUI 分割线坐标系统一
+- `dot(pixelPos - screenCtr, perp) - offsetPx` 判断像素在线哪一侧
+- `splitSide > 0` = NPR，`splitSide <= 0` = PBR
+
+**控制器**：SplitScreenController（左键旋转、右键平移、R 重置），每帧写入 `_SplitLineDirX/Y`、`_SplitLineOffset`、`_SplitLineOffsetPx` 全局 Shader 参数。
+
+**踩坑**：NDC 与 GUI 坐标系不一致导致分割线错位 — 最终通过 Y 轴翻转 + 像素空间统一计算解决。
