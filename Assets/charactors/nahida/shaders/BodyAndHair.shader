@@ -140,7 +140,7 @@ Shader "Unlit/BodyAndHair"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _SHADOWS_SOFT
             #pragma multi_compile_fog
-            #pragma shader_feature _PBR_MODE
+            #pragma shader_feature _PBRMODE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -410,7 +410,7 @@ Shader "Unlit/BodyAndHair"
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
-                #ifdef _PBR_MODE
+                #ifdef _PBRMODE
                     // ---- PBR 路径（终末地风格：PBR质感 + NPR亮度）----
                     InputData inputData = (InputData)0;
                     inputData.positionWS = input.positionWS;
@@ -485,7 +485,7 @@ Shader "Unlit/BodyAndHair"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
-            #pragma shader_feature _PBR_MODE
+            #pragma shader_feature _PBRMODE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
