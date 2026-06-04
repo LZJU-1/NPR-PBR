@@ -52,7 +52,7 @@ Shader "Unlit/BodyAndHair"
         // ================================================================
         _DoubleSided  ("Double Sided",  Range(0, 1)) = 0
         _Alpha        ("Alpha",         Range(0, 1)) = 1
-        [Toggle] _PBRMODE ("PBR Mode", Float) = 0
+        _PBRMode      ("PBR Mode",       Range(0, 1)) = 0
 
         // ---- 边缘光（菲涅尔）----
         _RimColor     ("Rim Color",     Color) = (1, 1, 1, 1)
@@ -140,7 +140,6 @@ Shader "Unlit/BodyAndHair"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _SHADOWS_SOFT
             #pragma multi_compile_fog
-            #pragma shader_feature _PBRMODE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -180,7 +179,7 @@ Shader "Unlit/BodyAndHair"
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
-                float  _DoubleSided, _Alpha;
+                float  _DoubleSided, _Alpha, _PBRMode;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -410,37 +409,36 @@ Shader "Unlit/BodyAndHair"
                 float fresnel = 1.0 - saturate(NoV);
                 fresnel = pow(fresnel, _RimPower);
                 float3 albedo;
-                #ifdef _PBRMODE
-                    BRDFData brdfData;
-                    float3 specColor = lerp(0.04, baseTex.rgb, ilm.r);
-                    float oneMinusReflectivity = OneMinusReflectivityMetallic(ilm.r);
-                    InitializeBRDFData(baseTex.rgb, ilm.r, specColor, ilm.g, 1.0, brdfData);
+                if (_PBRMode > 0.5)
+                {
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = input.positionWS;
+                    inputData.normalWS = N;
+                    inputData.viewDirectionWS = SafeNormalize(V);
+                    inputData.shadowCoord = input.shadowCoord;
+                    inputData.fogCoord = 0;
+                    inputData.vertexLighting = half3(0,0,0);
+                    inputData.bakedGI = SampleSH(N);
+                    inputData.normalizedScreenSpaceUV = input.positionNDC.xy;
+                    inputData.shadowMask = half4(1,1,1,1);
 
-                    // 直接光
-                    Light mainLight = GetMainLight(input.shadowCoord);
-                    float3 directLight = LightingPhysicallyBased(brdfData, mainLight, N, V);
+                    SurfaceData surfaceData = (SurfaceData)0;
+                    surfaceData.albedo = baseTex.rgb;
+                    surfaceData.metallic = ilm.r;
+                    surfaceData.smoothness = 1.0 - ilm.g;
+                    surfaceData.occlusion = ilm.b;
+                    surfaceData.alpha = 1;
+                    surfaceData.normalTS = float3(0,0,1);
 
-                    // 间接光（天空球GI）
-                    float3 indirectDiffuse  = SampleSH(N);
-                    float3 indirectSpecular = GlossyEnvironmentReflection(
-                        reflect(-V, N), brdfData.perceptualRoughness, 1.0);
-                    float fresnelTerm = Pow4(1.0 - saturate(dot(N, V)));
-                    float3 indirectLight = (indirectDiffuse * brdfData.diffuse
-                        + indirectSpecular * EnvironmentBRDF(brdfData, indirectDiffuse, indirectSpecular, fresnelTerm))
-                        * ilm.b; // AO
-
-                    albedo = directLight + indirectLight;
-
-                    // 环境补光：保持 NPR 的明亮感
-                    albedo += _AmbientColor.rgb * 0.4 * baseTex.rgb;
-
-                    // 边缘光
+                    albedo = UniversalFragmentPBR(inputData, surfaceData);
+                    albedo += _AmbientColor.rgb * 0.5 * baseTex.rgb;
                     float rimF = 1.0 - saturate(NoV);
                     albedo += pow(rimF, _RimPower) * _RimIntensity * _RimColor.rgb;
-                #else
-                    // ---- NPR 路径 ----
+                }
+                else
+                {
                     albedo = diffuse + specular + metallic + fresnel * _RimIntensity * _RimColor.rgb;
-                #endif
+                }
 
                 // Alpha: 基础 Alpha × 各贴图 Alpha 通道
                 // _DoubleSided 允许背面强制可见
@@ -481,7 +479,6 @@ Shader "Unlit/BodyAndHair"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fog
-            #pragma shader_feature _PBRMODE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
