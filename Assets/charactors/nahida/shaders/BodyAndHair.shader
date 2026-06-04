@@ -180,7 +180,8 @@ Shader "Unlit/BodyAndHair"
 
             // 分割线参数（C# 全局写入）
             float _SplitLineOffset;
-            float2 _SplitLineDir;
+            float _SplitLineDirX;
+            float _SplitLineDirY;
             CBUFFER_START(UnityPerMaterial)
                 float4 _AmbientColor, _DiffuseColor, _ShadowColor;
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
@@ -417,8 +418,8 @@ Shader "Unlit/BodyAndHair"
                 float3 albedo;
                 // 分割线：splitSide>0=NPR，else=PBR
                 float2 screenPos = input.positionNDC.xy;
-                float splitSide = dot(screenPos, _SplitLineDir) - _SplitLineOffset;
-                bool hasLine = abs(_SplitLineDir.x) + abs(_SplitLineDir.y) > 0.001;
+                float splitSide = dot(screenPos, float2(_SplitLineDirX, _SplitLineDirY)) - _SplitLineOffset;
+                bool hasLine = abs(_SplitLineDirX) + abs(_SplitLineDirY) > 0.001;
                 if (!hasLine || splitSide > 0.0)
                 {
                     // ---- NPR 侧 ----
@@ -515,7 +516,8 @@ Shader "Unlit/BodyAndHair"
 
             // 分割线参数（C# 全局写入）
             float _SplitLineOffset;
-            float2 _SplitLineDir;
+            float _SplitLineDirX;
+            float _SplitLineDirY;
             CBUFFER_START(UnityPerMaterial)
                 sampler2D _BaseTex;
                 float4    _BaseTex_ST;

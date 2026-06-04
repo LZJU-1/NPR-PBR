@@ -40,6 +40,13 @@ public class SplitScreenController : MonoBehaviour
             lineOffset = Mathf.Clamp(lineOffset + dx / Screen.width * 2f, -1f, 1f);
             _lastMouseX = m.position.x.ReadValue();
         }
+
+        // 写入 Shader 全局参数
+        float rad = lineAngle * Mathf.Deg2Rad;
+        Vector2 dir = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad));
+        Shader.SetGlobalFloat("_SplitLineOffset", lineOffset);
+        Shader.SetGlobalFloat("_SplitLineDirX", dir.x);
+        Shader.SetGlobalFloat("_SplitLineDirY", dir.y);
     }
 
     void OnGUI()
