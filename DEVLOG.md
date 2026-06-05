@@ -220,3 +220,23 @@ ilm.a ∈ [0.85, 1.00] → _OutlineMapColor4
 **控制器**：SplitScreenController（左键旋转、右键平移、R 重置），每帧写入 `_SplitLineDirX/Y`、`_SplitLineOffset`、`_SplitLineOffsetPx` 全局 Shader 参数。
 
 **踩坑**：NDC 与 GUI 坐标系不一致导致分割线错位 — 最终通过 Y 轴翻转 + 像素空间统一计算解决。
+
+---
+
+### PBR 阴影抖动修复
+
+**问题**：PBR 模式下旋转平行光时，角色表面阴影边缘出现明显的像素级跳动/闪烁。NPR 侧不受影响（使用自绘 Ramp/SDF 阴影）。
+
+**原因**：PBR 路径调用 `UniversalFragmentPBR`，内部使用 `mainLight.shadowAttenuation`，依赖 Unity 的实时 Shadow Map。Shadow Map 是离散采样——4096 像素覆盖整个阴影距离范围，每个像素对应世界空间几厘米。灯光旋转时，阴影边缘的采样点在世界空间中移动，映射到 Shadow Map 不同像素→产生阶梯状跳动。
+
+另一个重要因素：**Normal Bias** 把阴影采样点沿表面法线偏移一段距离，灯光角度一变，偏移方向跟着变→阴影边缘"游动"比物理精度问题更明显。
+
+**修复步骤**：
+
+1. **Shadow Resolution** `2048` → `4096`（像素密度翻倍）
+2. **Normal Bias** `0.5` → `0.05`（大幅减小法线偏移，核心修复）
+3. **Depth Bias** `0.1` → `0.05`
+4. **Cascade Count** `4` → `1`（单 Cascade，全部分辨率集中在角色身上）
+5. **Shadow Distance** `50` → `15`（4096 像素只覆盖 15 单位，每像素精度最大化）
+
+**结论**：大幅改善但无法完全消除——Shadow Map 的离散采样本质决定了转动灯光时边缘必然有微小的像素级跳动，这是实时渲染的物理极限。NPR 侧完全不受此影响。
