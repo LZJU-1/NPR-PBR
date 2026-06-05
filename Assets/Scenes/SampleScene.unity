@@ -320,8 +320,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SplitScreenController
   lineColor: {r: 1, g: 1, b: 1, a: 1}
   lineThickness: 3
-  lineOffset: 0.04
-  lineAngle: 198
+  lineOffset: -0.03
+  lineAngle: 153
 --- !u!4 &213572183
 Transform:
   m_ObjectHideFlags: 0
