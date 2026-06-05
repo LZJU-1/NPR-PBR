@@ -451,7 +451,7 @@ Shader "Unlit/BodyAndHair"
                     surfaceData.smoothness = 1.0 - ilm.g;
                     surfaceData.occlusion = ilm.b;
                     surfaceData.alpha = 1;
-                    surfaceData.normalTS = float3(0,0,1);
+                    surfaceData.normalTS = normalTS;
 
                     albedo = UniversalFragmentPBR(inputData, surfaceData);
                     albedo += _AmbientColor.rgb * 0.5 * baseTex.rgb;
