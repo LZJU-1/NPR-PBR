@@ -135,6 +135,10 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _OutlineOffset: 0.002
+    - _PBRMODE: 0
+    - _PBRMetallicScale: 0.3
+    - _PBRMode: 0
+    - _PBRSmoothnessScale: 0.5
     - _Parallax: 0.02
     - _QueueOffset: 0
     - _RampMapRow0: 1
@@ -143,6 +147,8 @@ Material:
     - _RampMapRow3: 5
     - _RampMapRow4: 2
     - _ReceiveShadows: 1
+    - _RimIntensity: 0.3
+    - _RimPower: 4
     - _Smoothness: 0.14142135
     - _SmoothnessTextureChannel: 0
     - _SpecExpon: 50
@@ -162,6 +168,12 @@ Material:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _DiffuseColor: {r: 0.906, g: 0.906, b: 0.906, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _OutlineMapColor0: {r: 0, g: 0, b: 0, a: 1}
+    - _OutlineMapColor1: {r: 0, g: 0, b: 0, a: 1}
+    - _OutlineMapColor2: {r: 0, g: 0, b: 0, a: 1}
+    - _OutlineMapColor3: {r: 0, g: 0, b: 0, a: 1}
+    - _OutlineMapColor4: {r: 0, g: 0, b: 0, a: 1}
+    - _RimColor: {r: 1, g: 1, b: 1, a: 1}
     - _ShadowColor: {r: 0.7369999, g: 0.7369999, b: 0.7369999, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
   m_BuildTextureStacks: []

@@ -157,6 +157,10 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _OutlineOffset: 0.003
+    - _PBRMODE: 0
+    - _PBRMetallicScale: 0.3
+    - _PBRMode: 0
+    - _PBRSmoothnessScale: 0.5
     - _Parallax: 0.02
     - _QueueOffset: 0
     - _RampMapRow0: 1

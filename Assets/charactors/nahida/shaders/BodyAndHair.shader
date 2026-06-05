@@ -447,8 +447,8 @@ Shader "Unlit/BodyAndHair"
 
                     SurfaceData surfaceData = (SurfaceData)0;
                     surfaceData.albedo = baseTex.rgb;
-                    surfaceData.metallic   = ilm.r * 0.05;    // 压到极低，非金属质感
-                    surfaceData.smoothness = (1.0 - ilm.g) * 0.3 + 0.1;  // 低光滑度，皮肤/布料哑光
+                    surfaceData.metallic   = pow(ilm.r, 1.5) * 0.5;  // 低值压平，高值保留金属感
+                    surfaceData.smoothness = lerp(0.15, 0.55, 1.0 - ilm.g);  // 哑光~半光泽
                     surfaceData.occlusion = ilm.b;
                     surfaceData.alpha = 1;
                     surfaceData.normalTS = normalTS;
