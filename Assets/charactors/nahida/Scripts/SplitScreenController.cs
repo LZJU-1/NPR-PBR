@@ -66,10 +66,5 @@ public class SplitScreenController : MonoBehaviour
         GUIUtility.RotateAroundPivot(angle, center);
         GUI.DrawTexture(new Rect(center.x - length * 0.5f, center.y - lineThickness * 0.5f, length, lineThickness), Texture2D.whiteTexture);
         GUI.matrix = oldMat;
-
-        GUILayout.BeginArea(new Rect(10, 10, 280, 50));
-        GUILayout.Box(string.Format("Angle: {0:F0}  Offset: {1:F2}", lineAngle, lineOffset));
-        GUILayout.Label("Left-drag: Rotate | Right-drag: Pan | R: Reset");
-        GUILayout.EndArea();
     }
 }
