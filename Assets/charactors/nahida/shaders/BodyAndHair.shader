@@ -55,11 +55,10 @@ Shader "Unlit/BodyAndHair"
         _PBRMetallicScale  ("PBR Metallic Scale",  Range(0, 1)) = 0.3
         _PBRSmoothnessScale ("PBR Smoothness Scale", Range(0, 1)) = 0.5
         _PBROcclusionStrength ("PBR Occlusion Strength", Range(0, 1)) = 0.12
-        _PBRIndirectStrength  ("PBR Indirect Strength",  Range(0, 2)) = 0.28
-        _PBRShadowFillColor   ("PBR Shadow Fill Color",  Color) = (0.90, 0.84, 0.76, 1)
-        _PBRShadowFillStrength ("PBR Shadow Fill Strength", Range(0, 2)) = 0.32
-        _PBRBackLightFillStrength ("PBR Back Light Fill Strength", Range(0, 2)) = 0.10
-        _PBRBrightSurfaceFillDamping ("PBR Bright Surface Fill Damping", Range(0, 1)) = 0.75
+        _PBRIndirectStrength  ("PBR Indirect Strength",  Range(0, 2)) = 0.12
+        _PBRNPRShadowBlend ("PBR NPR Shadow Blend", Range(0, 1)) = 0.65
+        _PBRNPRToneStrength ("PBR NPR Tone Strength", Range(0, 1)) = 0.45
+        _PBRShadowFloor ("PBR Shadow Floor", Range(0, 1)) = 0.35
         _PBRMode      ("PBR Mode",       Range(0, 1)) = 0
 
         // ---- 边缘光（菲涅尔）----
@@ -196,9 +195,7 @@ Shader "Unlit/BodyAndHair"
                 float  _DoubleSided, _Alpha, _PBRMode;
                 float  _PBRMetallicScale, _PBRSmoothnessScale;
                 float  _PBROcclusionStrength, _PBRIndirectStrength;
-                float4 _PBRShadowFillColor;
-                float  _PBRShadowFillStrength, _PBRBackLightFillStrength;
-                float  _PBRBrightSurfaceFillDamping;
+                float  _PBRNPRShadowBlend, _PBRNPRToneStrength, _PBRShadowFloor;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -465,22 +462,23 @@ Shader "Unlit/BodyAndHair"
                     surfaceData.alpha = 1;
                     surfaceData.normalTS = normalTS;
 
-                    albedo = UniversalFragmentPBR(inputData, surfaceData);
-
-                    float baseLuma = dot(baseTex.rgb, float3(0.2126, 0.7152, 0.0722));
-                    float brightSurfaceDamping = lerp(
-                        1.0,
-                        1.0 - smoothstep(0.58, 0.92, baseLuma),
-                        _PBRBrightSurfaceFillDamping);
-                    albedo += _AmbientColor.rgb * _PBRIndirectStrength * baseTex.rgb * brightSurfaceDamping;
+                    float4 pbrLit = UniversalFragmentPBR(inputData, surfaceData);
+                    float3 pbrColor = pbrLit.rgb;
+                    pbrColor += SampleSH(N) * _PBRIndirectStrength * baseTex.rgb;
 
                     float realtimeShadow = 1.0 - saturate(light.shadowAttenuation);
-                    float backLightShadow = 1.0 - saturate(NoL * 0.5 + 0.5);
-                    float shadowFillMask = saturate(
-                        realtimeShadow * _PBRShadowFillStrength +
-                        backLightShadow * _PBRBackLightFillStrength) * brightSurfaceDamping;
-                    float3 materialShadowTone = lerp(baseTex.rgb, grayShadowColor, 0.35);
-                    albedo += shadowFillMask * materialShadowTone * _PBRShadowFillColor.rgb;
+                    float rampShadow = 1.0 - lambertStep;
+                    float wrappedBackLight = 1.0 - smoothstep(0.15, 0.85, halfLambert);
+                    float stylizedShadowMask = saturate(max(realtimeShadow, max(rampShadow, wrappedBackLight)));
+
+                    // 暗部色相从 NPR Ramp 借色，PBR 仍保留法线、高光、金属等结构信息。
+                    float3 nprTone = lerp(grayShadowColor, diffuse, _PBRNPRToneStrength);
+                    float shadowBlend = stylizedShadowMask * _PBRNPRShadowBlend;
+                    float3 pbrWithRampTone = lerp(pbrColor, nprTone, shadowBlend);
+
+                    float3 shadowFloorColor = baseTex.rgb * _AmbientColor.rgb;
+                    pbrWithRampTone = max(pbrWithRampTone, shadowFloorColor * stylizedShadowMask * _PBRShadowFloor);
+                    albedo = pbrWithRampTone;
 
                     float rimF = 1.0 - saturate(NoV);
                     albedo += pow(rimF, _RimPower) * _RimIntensity * _RimColor.rgb;
