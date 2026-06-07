@@ -54,6 +54,12 @@ Shader "Unlit/BodyAndHair"
         _Alpha        ("Alpha",         Range(0, 1)) = 1
         _PBRMetallicScale  ("PBR Metallic Scale",  Range(0, 1)) = 0.3
         _PBRSmoothnessScale ("PBR Smoothness Scale", Range(0, 1)) = 0.5
+        _PBROcclusionStrength ("PBR Occlusion Strength", Range(0, 1)) = 0.12
+        _PBRIndirectStrength  ("PBR Indirect Strength",  Range(0, 2)) = 0.28
+        _PBRShadowFillColor   ("PBR Shadow Fill Color",  Color) = (0.90, 0.84, 0.76, 1)
+        _PBRShadowFillStrength ("PBR Shadow Fill Strength", Range(0, 2)) = 0.32
+        _PBRBackLightFillStrength ("PBR Back Light Fill Strength", Range(0, 2)) = 0.10
+        _PBRBrightSurfaceFillDamping ("PBR Bright Surface Fill Damping", Range(0, 1)) = 0.75
         _PBRMode      ("PBR Mode",       Range(0, 1)) = 0
 
         // ---- 边缘光（菲涅尔）----
@@ -188,6 +194,11 @@ Shader "Unlit/BodyAndHair"
                 float  _BaseTexFac, _ToonTexFac, _SphereTexFac, _SphereMulAdd;
                 float4 _BaseTex_ST;
                 float  _DoubleSided, _Alpha, _PBRMode;
+                float  _PBRMetallicScale, _PBRSmoothnessScale;
+                float  _PBROcclusionStrength, _PBRIndirectStrength;
+                float4 _PBRShadowFillColor;
+                float  _PBRShadowFillStrength, _PBRBackLightFillStrength;
+                float  _PBRBrightSurfaceFillDamping;
                 float  _SpecExpon, _KsNonMetallic, _KsMetallic;
                 float  _RampMapRow0, _RampMapRow1, _RampMapRow2, _RampMapRow3, _RampMapRow4;
                 float  _OutlineOffset;
@@ -447,14 +458,30 @@ Shader "Unlit/BodyAndHair"
 
                     SurfaceData surfaceData = (SurfaceData)0;
                     surfaceData.albedo = baseTex.rgb;
-                    surfaceData.metallic   = pow(ilm.r, 1.5) * 0.5;  // 低值压平，高值保留金属感
-                    surfaceData.smoothness = lerp(0.15, 0.55, 1.0 - ilm.g);  // 哑光~半光泽
-                    surfaceData.occlusion = ilm.b;
+                    surfaceData.metallic   = pow(ilm.r, 1.5) * _PBRMetallicScale;  // 低值压平，高值保留金属感
+                    surfaceData.smoothness = lerp(0.15, 0.95, 1.0 - ilm.g) * _PBRSmoothnessScale;
+                    // ILM.b 是 NPR 高光遮罩，不是真正 AO；只做很轻的遮蔽，避免暗部被二次压黑。
+                    surfaceData.occlusion = lerp(1.0, saturate(ilm.b), _PBROcclusionStrength);
                     surfaceData.alpha = 1;
                     surfaceData.normalTS = normalTS;
 
                     albedo = UniversalFragmentPBR(inputData, surfaceData);
-                    albedo += _AmbientColor.rgb * 0.5 * baseTex.rgb;
+
+                    float baseLuma = dot(baseTex.rgb, float3(0.2126, 0.7152, 0.0722));
+                    float brightSurfaceDamping = lerp(
+                        1.0,
+                        1.0 - smoothstep(0.58, 0.92, baseLuma),
+                        _PBRBrightSurfaceFillDamping);
+                    albedo += _AmbientColor.rgb * _PBRIndirectStrength * baseTex.rgb * brightSurfaceDamping;
+
+                    float realtimeShadow = 1.0 - saturate(light.shadowAttenuation);
+                    float backLightShadow = 1.0 - saturate(NoL * 0.5 + 0.5);
+                    float shadowFillMask = saturate(
+                        realtimeShadow * _PBRShadowFillStrength +
+                        backLightShadow * _PBRBackLightFillStrength) * brightSurfaceDamping;
+                    float3 materialShadowTone = lerp(baseTex.rgb, grayShadowColor, 0.35);
+                    albedo += shadowFillMask * materialShadowTone * _PBRShadowFillColor.rgb;
+
                     float rimF = 1.0 - saturate(NoV);
                     albedo += pow(rimF, _RimPower) * _RimIntensity * _RimColor.rgb;
                 }
