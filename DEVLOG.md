@@ -240,3 +240,127 @@ ilm.a ∈ [0.85, 1.00] → _OutlineMapColor4
 5. **Shadow Distance** `50` → `15`（4096 像素只覆盖 15 单位，每像素精度最大化）
 
 **结论**：大幅改善但无法完全消除——Shadow Map 的离散采样本质决定了转动灯光时边缘必然有微小的像素级跳动，这是实时渲染的物理极限。NPR 侧完全不受此影响。
+
+---
+
+## 2026-06-07
+
+### PBR 风格化暗部：混合 NPR Ramp 色相
+
+**目标**：PBR 分支不追求纯物理写实，而是接近《明日方舟：终末地》一类角色效果：
+
+```
+PBR 负责：法线细节 / 高光结构 / 金属感 / 光滑度
+NPR 负责：暗部色相 / 角色肤色氛围 / Ramp 阴影美术控制
+```
+
+**问题 1：Unity 原生 PBR 阴影过黑**
+
+PBR 路径调用 `UniversalFragmentPBR(inputData, surfaceData)`，内部使用 Unity 实时阴影。角色背光或落入 Shadow Map 时，暗部会被压得过黑，和 NPR 侧温暖、可控的 Ramp 暗部差异太大。
+
+**初始修复：加法补光**
+
+第一版尝试在 PBR 结果后叠加环境补光和阴影补光：
+
+```
+albedo += Ambient * baseTex
+albedo += shadowMask * baseTex * shadowFillColor
+```
+
+该方法能明显提亮暗部，但出现新问题：
+
+- 皮肤和白发本身是高明度、低饱和贴图，加法补光会把 RGB 三通道一起推向 1
+- 结果是皮肤、头发被“冲白”，原本的肤色和发色层次被洗掉
+- 补光越强，越像在材质上盖了一层白粉，而不是恢复角色暗部
+
+**结论**：暗部不能靠继续加亮解决，必须保留/借用 NPR Ramp 的色相。
+
+### 最终方案：PBR 光照结构 + NPR 暗部色相
+
+保留 PBR 的 `UniversalFragmentPBR` 作为基础光照：
+
+```
+float4 pbrLit = UniversalFragmentPBR(inputData, surfaceData);
+float3 pbrColor = pbrLit.rgb;
+```
+
+然后构造风格化阴影遮罩：
+
+```
+float realtimeShadow = 1.0 - saturate(light.shadowAttenuation);
+float rampShadow = 1.0 - lambertStep;
+float wrappedBackLight = 1.0 - smoothstep(0.15, 0.85, halfLambert);
+float stylizedShadowMask = saturate(max(realtimeShadow, max(rampShadow, wrappedBackLight)));
+```
+
+三个来源分别对应：
+
+- `realtimeShadow`：Unity 原生 Shadow Map 的阴影区域
+- `rampShadow`：NPR Ramp 硬/软分界的暗部区域
+- `wrappedBackLight`：背光面补充遮罩，避免没有实时阴影时背面仍然过亮或过灰
+
+暗部颜色不再加法提亮，而是向 NPR 已经算好的阴影色混合：
+
+```
+float3 nprTone = lerp(grayShadowColor, diffuse, _PBRNPRToneStrength);
+float shadowBlend = stylizedShadowMask * _PBRNPRShadowBlend;
+float3 pbrWithRampTone = lerp(pbrColor, nprTone, shadowBlend);
+```
+
+这样：
+
+- 亮面仍保留 PBR 的高光、法线、金属质感
+- 暗部逐渐回到 NPR Ramp 的暖色/材质色相
+- 皮肤不会被加法补光冲白，能保留 NPR 侧的肤色感觉
+- 白发暗部能回到灰蓝/灰紫层次，而不是整体雪白
+
+最后加一个很弱的暗部下限，防止原生阴影完全压死：
+
+```
+float3 shadowFloorColor = baseTex.rgb * _AmbientColor.rgb;
+pbrWithRampTone = max(pbrWithRampTone, shadowFloorColor * stylizedShadowMask * _PBRShadowFloor);
+```
+
+### 修复：ILM.b 不能作为 PBR AO
+
+之前 PBR 分支直接使用：
+
+```
+surfaceData.occlusion = ilm.b;
+```
+
+但在当前 NPR 管线中，`ILM.b` 的语义是**高光遮罩**，并不是真正的 AO/Cavity。直接当 PBR occlusion 会把很多非高光区域错误压暗。
+
+改为轻量遮蔽：
+
+```
+surfaceData.occlusion = lerp(1.0, saturate(ilm.b), _PBROcclusionStrength);
+```
+
+默认 `_PBROcclusionStrength = 0.12`，只保留一点局部明暗变化，避免二次压黑。
+
+### 新增 PBR 调节参数
+
+| 参数 | 默认值 | 作用 |
+|---|---:|---|
+| `_PBROcclusionStrength` | `0.12` | ILM.b 参与 PBR occlusion 的强度，越高暗部越容易脏 |
+| `_PBRIndirectStrength` | `0.12` | 额外环境光强度，只做轻微托底 |
+| `_PBRNPRShadowBlend` | `0.65` | 阴影区域向 NPR Ramp 色相混合的强度 |
+| `_PBRNPRToneStrength` | `0.45` | 在 `grayShadowColor` 和 `diffuse` 之间选暗部色调 |
+| `_PBRShadowFloor` | `0.35` | 暗部最低亮度下限，防止 Shadow Map 纯黑 |
+
+### 当前结论
+
+这一路径比“纯 PBR + 补光”更适合角色展示：
+
+- **PBR** 提供材质结构与高光可信度
+- **NPR Ramp** 提供角色色彩设计与暗部审美
+- 现有 ILM/Ramp 贴图仍可复用，不需要立刻制作新资产
+
+但如果要继续逼近商业项目质量，后续仍建议补充 PBR 专用资产：
+
+- 真正的 AO/Cavity 贴图
+- Roughness/Smoothness 贴图
+- 更干净的 Metallic Mask
+- 皮肤、头发、布料、金属的材质分区 Mask
+- 头发各向异性高光方向/强度控制
