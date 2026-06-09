@@ -18,3 +18,28 @@ crashlytics-build.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Local third-party importer. MMD4Mecanim license asks users not to upload it.
+/Assets/MMD4Mecanim/
+/Assets/MMD4Mecanim.meta
+
+# Local character test assets from downloaded model packs.
+# Keep character-specific shaders/scripts/docs trackable.
+/Assets/charactors/zhuangfy/*.pmx
+/Assets/charactors/zhuangfy/*.pmx.meta
+/Assets/charactors/zhuangfy/*.fbx
+/Assets/charactors/zhuangfy/*.fbx.meta
+/Assets/charactors/zhuangfy/*.bytes
+/Assets/charactors/zhuangfy/*.bytes.meta
+/Assets/charactors/zhuangfy/*.xml
+/Assets/charactors/zhuangfy/*.xml.meta
+/Assets/charactors/zhuangfy/*.MMD4Mecanim.asset
+/Assets/charactors/zhuangfy/*.MMD4Mecanim.asset.meta
+/Assets/charactors/zhuangfy/textures/
+/Assets/charactors/zhuangfy/textures.meta
+/Assets/charactors/zhuangfy/other_tex/
+/Assets/charactors/zhuangfy/other_tex.meta
+/Assets/charactors/zhuangfy/others/
+/Assets/charactors/zhuangfy/others.meta
+/Assets/charactors/zhuangfy/Materials/
+/Assets/charactors/zhuangfy/Materials.meta
