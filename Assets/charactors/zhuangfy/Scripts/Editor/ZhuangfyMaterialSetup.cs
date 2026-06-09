@@ -182,11 +182,14 @@ public static class ZhuangfyMaterialSetup
             mat.SetFloat("_RampBlend", 0.42f);
             mat.SetFloat("_StyleRampStrength", 0.0f);
             mat.SetFloat("_RealtimeShadowStrength", 0.0f);
+            mat.SetFloat("_PBRBaseBlend", 0.08f);
+            mat.SetFloat("_NPRLightWrap", 1.0f);
+            mat.SetFloat("_NPRLitBoost", 1.08f);
             mat.SetFloat("_LutStrength", 0.35f);
             mat.SetFloat("_NormalStrength", 0.0f);
             mat.SetFloat("_MetallicScale", 0.0f);
             mat.SetFloat("_SmoothnessScale", 0.45f);
-            mat.SetFloat("_ShadowFloor", 0.42f);
+            mat.SetFloat("_ShadowFloor", 0.62f);
             mat.SetFloat("_SDFShadowStrength", index == 0 ? 0.85f : 0.0f);
             mat.SetFloat("_SDFDirectionalRG", 1.0f);
             mat.SetFloat("_SDFSwapRG", 0.0f);
@@ -210,6 +213,9 @@ public static class ZhuangfyMaterialSetup
             eyeShadow.SetFloat("_RampBlend", 0.2f);
             eyeShadow.SetFloat("_StyleRampStrength", 0.0f);
             eyeShadow.SetFloat("_RealtimeShadowStrength", 0.0f);
+            eyeShadow.SetFloat("_PBRBaseBlend", 0.0f);
+            eyeShadow.SetFloat("_NPRLightWrap", 1.0f);
+            eyeShadow.SetFloat("_NPRLitBoost", 1.0f);
             eyeShadow.SetFloat("_Alpha", 0.35f);
             eyeShadow.SetFloat("_AlphaClip", 0.02f);
             eyeShadow.SetFloat("_DebugMode", 0.0f);

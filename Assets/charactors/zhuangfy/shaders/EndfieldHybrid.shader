@@ -25,6 +25,9 @@ Shader "Custom/EndfieldHybrid"
         _StyleRampStrength ("Style Ramp Strength", Range(0, 1)) = 0
         _RealtimeShadowStrength ("Realtime Shadow Strength", Range(0, 1)) = 0.65
         _ShadowFloor ("Shadow Floor", Range(0, 1)) = 0.28
+        _PBRBaseBlend ("PBR Base Blend", Range(0, 1)) = 1
+        _NPRLightWrap ("NPR Light Wrap", Range(0, 1)) = 0.75
+        _NPRLitBoost ("NPR Lit Boost", Range(0, 2)) = 1
         _LutStrength ("LUT Strength", Range(0, 1)) = 0.35
         _LutRow ("LUT Row", Range(0, 1)) = 0.5
 
@@ -157,6 +160,7 @@ Shader "Custom/EndfieldHybrid"
                 float4 _BaseTex_ST;
                 float4 _BaseColor, _ShadowColor;
                 float _RampBlend, _RampThreshold, _RampFeather, _StyleRampStrength, _RealtimeShadowStrength, _ShadowFloor;
+                float _PBRBaseBlend, _NPRLightWrap, _NPRLitBoost;
                 float _LutStrength, _LutRow;
                 float _NormalStrength;
                 float _MetallicScale, _SmoothnessMin, _SmoothnessMax, _SmoothnessScale, _OcclusionStrength;
@@ -313,6 +317,8 @@ Shader "Custom/EndfieldHybrid"
                 rampU = lerp(rampU, styleTex.r, _StyleRampStrength);
                 float3 rampColor = SAMPLE_TEXTURE2D(_RampTex, sampler_RampTex, float2(rampU, 0.5)).rgb;
                 float3 lutBase = SampleLut(baseTex.rgb);
+                float wrappedLight = lerp(NoL, halfLambert, _NPRLightWrap);
+                float3 nprLitBase = lutBase * lerp(0.92, 1.08, saturate(wrappedLight)) * _NPRLitBoost;
                 float3 rampTone = lutBase * rampColor * _ShadowColor.rgb;
 
                 float sdfRawShadow = ComputeFaceSDFShadow(input.uv, L);
@@ -340,7 +346,8 @@ Shader "Custom/EndfieldHybrid"
                 }
 
                 float stylizedShadowMask = saturate(max(max(realtimeShadow, rampShadow), sdfShadow * _SDFShadowStrength));
-                float3 color = lerp(pbrColor, rampTone, stylizedShadowMask * _RampBlend);
+                float3 litBaseColor = lerp(nprLitBase, pbrColor, _PBRBaseBlend);
+                float3 color = lerp(litBaseColor, rampTone, stylizedShadowMask * _RampBlend);
                 color = max(color, lutBase * _ShadowFloor * stylizedShadowMask);
 
                 float2 specUV = float2(NoH, saturate(paramTex.a));

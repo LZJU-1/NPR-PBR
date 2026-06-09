@@ -364,3 +364,105 @@ surfaceData.occlusion = lerp(1.0, saturate(ilm.b), _PBROcclusionStrength);
 - 更干净的 Metallic Mask
 - 皮肤、头发、布料、金属的材质分区 Mask
 - 头发各向异性高光方向/强度控制
+
+---
+
+## 2026-06-09
+
+### 庄方宜：Endfield Hybrid Shader 当前实现
+
+**目标**：给新角色庄方宜搭建接近《明日方舟：终末地》方向的 PBR/NPR 混合材质。整体思路不是完全复刻 Nahida 的 NPR 管线，而是让：
+
+```
+PBR 负责：法线细节 / 高光结构 / 金属感 / 光滑度 / 布料金属差异
+NPR 负责：脸部 SDF 阴影 / 暗部色相 / Ramp 美术控制 / 角色肤色稳定性
+```
+
+### 脸部：避免被 URP 物理阴影压暗
+
+**问题**：即使 `_RealtimeShadowStrength = 0`，脸部仍然偏暗。原因是 `UniversalFragmentPBR(inputData, surfaceData)` 内部已经计算了 URP Shadow Map，`pbrColor` 本身就是被物理阴影压暗后的结果。
+
+**修复**：在 `EndfieldHybrid.shader` 中新增无 Shadow Map 的 NPR 亮面底色：
+
+```
+float wrappedLight = lerp(NoL, halfLambert, _NPRLightWrap);
+float3 nprLitBase = lutBase * lerp(0.92, 1.08, saturate(wrappedLight)) * _NPRLitBoost;
+float3 litBaseColor = lerp(nprLitBase, pbrColor, _PBRBaseBlend);
+```
+
+脸部材质默认：
+
+| 参数 | 默认值 | 作用 |
+|---|---:|---|
+| `_PBRBaseBlend` | `0.08` | 脸部亮面大部分走 NPR base，少量保留 PBR 质感 |
+| `_NPRLightWrap` | `1.0` | 用 half-Lambert 包裹光照，避免脸部亮面受光角过硬 |
+| `_NPRLitBoost` | `1.08` | 轻微提高脸部整体亮度 |
+| `_ShadowFloor` | `0.62` | 抬高脸部暗部最低亮度，避免脏黑 |
+
+这样脸部亮面不再主要依赖 PBR 的 Shadow Map，SDF 块状阴影仍然保留。
+
+### 脸部 SDF：方向与 Nahida 对齐
+
+庄方宜的 `T_actor_common_female_face_02_SDF.png` 不是单通道 SDF。通道检查后判断：
+
+- R/G：左右方向 SDF 梯度
+- B：更宽的正面渐变
+- A：局部遮罩，不适合作为主阴影
+
+当前使用 `_SDFDirectionalRG = 1`，并保持 `_SDFSwapRG = 0`。这个配置与 Nahida 的 `Face.shader` 中：
+
+```
+float mixSdf = lerp(sdfRight, sdfLeft, exposRight);
+```
+
+保持同一类阴影推进方向。`Swap Directional RG On/Off` 只保留为调试菜单，不作为默认值。
+
+### 衣服与布料：当前质感来源
+
+衣服材质使用同一个 `EndfieldHybrid.shader`，但与脸部不同，衣服默认仍以 PBR 底色为主，叠加 NPR 暗部/Ramp 色相。当前贴图绑定：
+
+| Shader 输入 | 贴图 | 用途 |
+|---|---|---|
+| `_BaseTex` | `T_actor_zhuangfy_cloth_01_D.png` | 布料/金属基础色 |
+| `_NormalTex` | `T_actor_zhuangfy_cloth_01_N.png` | 布料褶皱、硬表面细节 |
+| `_ParamTex` | `T_actor_zhuangfy_cloth_01_P.png` | PBR 参数：R 控 metallic，G 控 smoothness，B 控 occlusion |
+| `_StyleTex` | `T_actor_zhuangfy_cloth_01_ST.png` | 风格化 Ramp 分界调制 |
+| `_RampTex` | `T_actor_common_cloth_04_RD.png` | 布料暗部 Ramp 色相 |
+| `_SpecRampTex` | `T_actor_common_cloth_04_RS.png` | 布料/金属高光 Ramp |
+| `_LutTex` | `T_actor_common_cloth_lut_01_D.png` | 布料整体色彩校正 |
+| `_MatCapTex` | `T_actor_common_matcap_10_D.png` | 视角相关高光/材质反射补充 |
+| `_MaskTex` / `_EmissionTex` | `T_actor_zhuangfy_cloth_01_E.png` | 局部遮罩和轻微发光 |
+| `_FlowTex` | `T_fx_flow_517_M.png` | 目前仅作为 emission mask 的补充，尚未实现动态流动 |
+
+衣服默认参数：
+
+| 参数 | 默认值 | 效果 |
+|---|---:|---|
+| `_NormalStrength` | `1.0` | 启用法线细节，是布料褶皱质感的主要来源 |
+| `_MetallicScale` | `0.45` | 允许 `_P` 图中的金属区域显出 PBR 金属感 |
+| `_SmoothnessScale` | `0.85` | 提供偏亮、偏干净的高光结构 |
+| `_SpecRampStrength` | `0.35` | 用 RS 贴图加强风格化高光 |
+| `_MatCapStrength` | `0.12` | 补一点视角相关反射 |
+| `_StyleRampStrength` | `0.15` | 让布料暗部不是纯 Lambert，而受 ST 图调制 |
+| `_RealtimeShadowStrength` | `0.75` | 衣服保留较强场景阴影，和脸部区分开 |
+
+**当前判断**：衣服/布料的渲染方式没有明显逻辑问题。质感主要来自 PBR 参数图、法线贴图、RS 高光 Ramp 和 MatCap，而不是单纯靠提亮或 Ramp 上色。脸部已经从 PBR 阴影中解耦，衣服保留 PBR 阴影更合理，因为布料、金属、硬表面的体积感需要场景光参与。
+
+### 当前未完成项
+
+目前还没有真正实现终末地一类雨天/湿润材质效果。已有 `_FlowTex` 和 `_EmissionTex` 入口，但只是静态参与 emission mask，没有时间流动、雨滴法线、湿润粗糙度变化。
+
+后续如果做雨天效果，建议新增：
+
+- `_Wetness`：全局湿润强度
+- `_WetMask`：不同材质吸水/挂水强度
+- `_DropletNormalTex`：水滴法线
+- `_WetDarken`：布料吸水变深
+- `_WetSmoothnessBoost`：皮革/金属 wet 后更光滑
+- `_FlowSpeed`：雨痕或能量流动速度
+
+材质规则建议：
+
+- 布料/棉布：湿润后 base color 变深，高光只轻微增强
+- 皮革/金属：湿润后 smoothness 增强，高光更集中，叠加水滴 normal
+- 脸部皮肤：不做大面积雨滴，最多做非常弱的高光/湿润边缘，避免破坏角色脸部可读性
