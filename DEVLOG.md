@@ -466,3 +466,98 @@ float mixSdf = lerp(sdfRight, sdfLeft, exposRight);
 - 布料/棉布：湿润后 base color 变深，高光只轻微增强
 - 皮革/金属：湿润后 smoothness 增强，高光更集中，叠加水滴 normal
 - 脸部皮肤：不做大面积雨滴，最多做非常弱的高光/湿润边缘，避免破坏角色脸部可读性
+
+### 基础雨天预览实现
+
+新增 `Tools/Zhuangfy/Rain Preview/Enable` 和 `Tools/Zhuangfy/Rain Preview/Disable`，用于在编辑器中一键查看庄方宜的雨天材质状态。`Assign Endfield Hybrid Materials` 会默认关闭雨天预览，避免把湿润效果误当作常态材质。
+
+当前没有引入额外水珠贴图，先用 shader 程序噪声做基础原型：
+
+```
+float rainMask = RainDroplets(uv, _WetDropletScale, _WetDropletSpeed)
+               * _Wetness
+               * wetFlowMask;
+```
+
+雨天效果由以下几部分组成：
+
+| 效果 | 实现 |
+|---|---|
+| 布料吸水变深 | `baseTex.rgb` 向 `_WetDarkenColor` 叠乘后的颜色混合 |
+| 水膜变光滑 | `surfaceData.smoothness += glossWet * _WetSmoothnessBoost` |
+| 水珠/水痕法线 | 程序 rain mask 的 `ddx/ddy` 扰动 tangent-space normal |
+| 水珠高光 | 在原本 spec ramp 高光之外追加雨滴高光 |
+| 材质差异 | 通过 `_WetClothMask` 和 `_WetGlossMask` 区分布料吸水与皮革/金属挂水 |
+
+预览参数策略：
+
+- 脸部：`_Wetness` 极低，基本不表现大面积雨滴，避免破坏面部可读性
+- 皮肤：少量湿润高光
+- 头发：中等湿润，主要增加光泽
+- 衣服：高湿润，布料变深、smoothness 提高、出现水珠/水痕高光
+
+当前限制：
+
+- 水珠是程序生成的规则颗粒，不是美术制作的高质量 droplet normal
+- 没有真正的材质 ID mask，皮革/布料/金属只能通过材质级参数和现有 P 图间接区分
+- 水痕方向暂时基于 UV，复杂衣服 UV 岛之间可能不连续
+- 没有接入场景天气系统，只有材质预览菜单
+
+### 雨天预览迭代：水珠运动与可见性
+
+初版 `RainDroplets` 在每个 UV 网格内用 `frac(_Time)` 偏移水珠，移动到格子边界时会重置，因此看起来有轻微跳变；随后一次迭代把拖尾和可见亮点推得过强，复杂 UV 上会沿布料线条形成过多亮线。
+
+迭代方案：
+
+- 参考 Shadertoy 玻璃雨滴思路，给每个水滴加入生命周期 phase
+- 使用 `SawFade` 控制淡入/淡出，避免水滴硬切出现或消失
+- 水滴在单个生命周期内只短距离下滑，拖尾窗口很短，避免画成长线
+- 保留两层不同 scale/speed 的水滴层，增加随机性
+- 降低 `_WetStreakStrength` 与 `_WetDropletVisibility`，让视觉重点回到点状/短痕水珠
+- 保持脸部与表情材质的雨滴强度很低，避免破坏面部展示
+
+### 雨天预览迭代：水珠密度与材质区域
+
+问题：没有专门的 cloth/leather/metal 材质 ID mask 时，直接按“衣服材质球”加水珠会导致整件衣服到处都是水滴。这样不符合终末地一类效果：布料更多是吸水变深，皮革/金属/光滑硬表面才更容易挂水珠和形成亮高光。
+
+当前近似方案：
+
+```
+float inferredGloss = smoothstep(0.52, 0.92, 1.0 - paramTex.g);
+float inferredMetal = saturate(paramTex.r * _MetallicScale);
+float dropletSurfaceMask = saturate(
+    _WetGlossMask * 0.48 +
+    inferredGloss * 0.46 +
+    inferredMetal * 0.36 +
+    _WetClothMask * 0.08);
+```
+
+规则：
+
+- `_P.r` 较高：推断为金属倾向，更容易挂水
+- `1 - _P.g` 较高：推断为 smoothness 高，更像皮革/硬表面，更容易挂水
+- `_WetGlossMask`：材质级别的挂水倾向
+- `_WetClothMask`：只给很小的水珠权重，主要用于布料吸水变深
+
+新增 `_WetDropletDensity` 控制整体水珠密度。它参与每个水珠格子的随机激活，不只是降低亮度，因此可以真正减少“满屏都是水珠”的数量。
+
+限制：这种做法只是用现有 P 图推断皮革/金属/布料区域，不能像专门的材质 ID mask 那样精准。若后续需要稳定商业级效果，应补一张 material region mask，明确标注 cloth / leather / metal / skin / emissive。
+
+### 雨天预览迭代：编辑器动画时间
+
+水珠移动、淡入淡出并不是 Play 模式专属效果。为了让 Scene 视图中也能直接预览，`ZhuangfyMaterialSetup` 通过 `EditorApplication.update` 在雨天预览开启时持续写入全局 shader 参数 `_ZhuangfyWetPreviewTime`，并触发 `SceneView.RepaintAll()`。shader 侧优先使用该全局预览时间，没有预览时间时才回退到 Unity 内置 `_Time.y`。
+
+新增 `Tools/Zhuangfy/Rain Preview/Enable Strong`，用于检查水珠的运动、渐变出现/消失和短距离滑落。Strong 档位只提高可见性、速度和密度，不改变默认材质分配；正式展示时仍建议用普通 `Enable` 或进一步接天气系统参数。
+
+### 雨天预览迭代：世界空间向下流动
+
+上一版水滴使用 UV 作为运动坐标，生命周期和淡入淡出正确，但复杂衣服 UV 岛方向不一致，导致水珠看起来会沿不同贴图方向到处流动。现在水滴坐标改为世界空间投影：横向坐标来自 `positionWS.xz`，纵向坐标来自 `positionWS.y`，水珠在生命周期内沿世界 Y 轴负方向短距离滑落。
+
+同时加入 `verticalSurface` 权重，接近竖直的表面更容易出现下流雨滴，接近水平的表面只保留较弱挂水亮点。`_FlowTex` 仍然只提供很小的局部扰动，不再决定主要流动方向。
+
+后续要提升到更接近商业实机效果，建议补充：
+
+- 专用水珠 normal / 雨痕 mask
+- cloth / leather / metal 材质分区 mask
+- 世界空间或重力方向的 flow 计算，减少 UV 岛断裂
+- 与场景天气参数联动的全局 `_Wetness`

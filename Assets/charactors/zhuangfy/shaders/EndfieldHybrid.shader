@@ -17,6 +17,20 @@ Shader "Custom/EndfieldHybrid"
         _EmissionTex ("Emission Tex", 2D) = "black" {}
         _FlowTex ("Flow Mask", 2D) = "black" {}
 
+        _Wetness ("Rain Wetness", Range(0, 1)) = 0
+        _WetClothMask ("Wet Cloth Mask", Range(0, 1)) = 0
+        _WetGlossMask ("Wet Gloss Mask", Range(0, 1)) = 0
+        _WetDarken ("Wet Darken", Range(0, 1)) = 0.35
+        _WetDarkenColor ("Wet Darken Color", Color) = (0.58, 0.62, 0.68, 1)
+        _WetSmoothnessBoost ("Wet Smoothness Boost", Range(0, 1)) = 0.35
+        _WetSpecBoost ("Wet Spec Boost", Range(0, 2)) = 0.45
+        _WetDropletVisibility ("Wet Droplet Visibility", Range(0, 2)) = 0.2
+        _WetDropletDensity ("Wet Droplet Density", Range(0, 1)) = 0.35
+        _WetNormalStrength ("Wet Normal Strength", Range(0, 1)) = 0.2
+        _WetDropletScale ("Wet Droplet Scale", Range(4, 96)) = 36
+        _WetDropletSpeed ("Wet Droplet Speed", Range(0, 6)) = 1.4
+        _WetStreakStrength ("Wet Streak Strength", Range(0, 1)) = 0.12
+
         _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
         _ShadowColor ("Shadow Color", Color) = (0.78, 0.72, 0.68, 1)
         _RampBlend ("Ramp Tone Blend", Range(0, 1)) = 0.55
@@ -159,6 +173,9 @@ Shader "Custom/EndfieldHybrid"
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseTex_ST;
                 float4 _BaseColor, _ShadowColor;
+                float _Wetness, _WetClothMask, _WetGlossMask, _WetDarken;
+                float4 _WetDarkenColor;
+                float _WetSmoothnessBoost, _WetSpecBoost, _WetDropletVisibility, _WetDropletDensity, _WetNormalStrength, _WetDropletScale, _WetDropletSpeed, _WetStreakStrength;
                 float _RampBlend, _RampThreshold, _RampFeather, _StyleRampStrength, _RealtimeShadowStrength, _ShadowFloor;
                 float _PBRBaseBlend, _NPRLightWrap, _NPRLitBoost;
                 float _LutStrength, _LutRow;
@@ -189,6 +206,7 @@ Shader "Custom/EndfieldHybrid"
             TEXTURE2D(_HairSpecTex); SAMPLER(sampler_HairSpecTex);
             TEXTURE2D(_EmissionTex); SAMPLER(sampler_EmissionTex);
             TEXTURE2D(_FlowTex); SAMPLER(sampler_FlowTex);
+            float _ZhuangfyWetPreviewTime;
 
             Varyings vert(Attributes input)
             {
@@ -221,6 +239,51 @@ Shader "Custom/EndfieldHybrid"
                 result = lerp(result, value.b, step(1.5, channel) * (1.0 - step(2.5, channel)));
                 result = lerp(result, value.a, step(2.5, channel));
                 return result;
+            }
+
+            float Hash21(float2 p)
+            {
+                p = frac(p * float2(123.34, 456.21));
+                p += dot(p, p + 45.32);
+                return frac(p.x * p.y);
+            }
+
+            float SawFade(float t, float fadeIn, float fadeOut)
+            {
+                return smoothstep(0.0, fadeIn, t) * (1.0 - smoothstep(1.0 - fadeOut, 1.0, t));
+            }
+
+            float RainLayer(float2 uv, float scale, float speed, float density, float seed)
+            {
+                float2 p = uv * scale;
+                float2 id = floor(p);
+                float2 gv = frac(p) - 0.5;
+                float rnd = Hash21(id + seed);
+                float rainTime = _ZhuangfyWetPreviewTime > 0.0 ? _ZhuangfyWetPreviewTime : _Time.y;
+                float phase = frac(rainTime * speed * 0.22 + rnd);
+                float active = step(1.0 - saturate(density), rnd);
+                float fade = SawFade(phase, 0.16, 0.34) * active;
+
+                float2 offset = float2(Hash21(id + seed + 2.17) - 0.5, Hash21(id + seed + 5.93) - 0.5) * float2(0.48, 0.18);
+                offset.y += lerp(0.24, -0.20, smoothstep(0.10, 0.92, phase));
+                float2 q = gv - offset;
+
+                float radius = lerp(0.055, 0.135, smoothstep(0.0, 0.34, phase));
+                float d = length(q / float2(0.92, 1.08));
+                float body = 1.0 - smoothstep(radius * 0.55, radius, d);
+                float edge = (1.0 - smoothstep(radius, radius + 0.045, d)) * smoothstep(radius * 0.48, radius * 0.82, d);
+                float drop = saturate(body * 0.75 + edge * 0.45) * fade;
+
+                float tailWindow = smoothstep(0.03, 0.14, q.y) * (1.0 - smoothstep(0.14, 0.34, q.y));
+                float tail = (1.0 - smoothstep(0.0, 0.022, abs(q.x))) * tailWindow * fade * step(0.82, rnd);
+                return saturate(drop + tail * _WetStreakStrength);
+            }
+
+            float RainDroplets(float2 uv, float scale, float speed, float density)
+            {
+                float layerA = RainLayer(uv, scale, speed, density, 0.0);
+                float layerB = RainLayer(uv + float2(0.17, 0.31), scale * 1.65, speed * 1.27, density * 0.72, 19.37) * 0.58;
+                return saturate(max(layerA, layerB));
             }
 
             float ComputeFaceSDFShadow(float2 uv, float3 lightDirWS)
@@ -273,6 +336,20 @@ Shader "Custom/EndfieldHybrid"
                 float4 hairSpecStyle = SAMPLE_TEXTURE2D(_HairSpecTex, sampler_HairSpecTex, input.uv);
                 float4 emissionTex = SAMPLE_TEXTURE2D(_EmissionTex, sampler_EmissionTex, input.uv);
                 float4 flowTex = SAMPLE_TEXTURE2D(_FlowTex, sampler_FlowTex, input.uv);
+                float wetAmount = saturate(_Wetness);
+                float wetFlowMask = saturate(0.45 + flowTex.r * 0.55 + maskTex.r * 0.12);
+                float inferredGloss = smoothstep(0.52, 0.92, 1.0 - paramTex.g);
+                float inferredMetal = saturate(paramTex.r * _MetallicScale);
+                float dropletSurfaceMask = saturate(_WetGlossMask * 0.48 + inferredGloss * 0.46 + inferredMetal * 0.36 + _WetClothMask * 0.08);
+                float3 baseNormalWS = normalize(input.normalWS);
+                float verticalSurface = smoothstep(0.12, 0.55, 1.0 - abs(baseNormalWS.y));
+                float2 worldRainUv = float2(dot(input.positionWS.xz, float2(0.82, 0.57)), input.positionWS.y);
+                worldRainUv += (flowTex.rg - 0.5) * 0.018;
+                float rainMask = RainDroplets(worldRainUv, _WetDropletScale, _WetDropletSpeed, _WetDropletDensity);
+                rainMask = saturate(rainMask * wetAmount * wetFlowMask * dropletSurfaceMask * (0.25 + verticalSurface * 1.1));
+                float clothWet = wetAmount * _WetClothMask * wetFlowMask;
+                float glossWet = wetAmount * saturate(_WetGlossMask + rainMask * 0.75);
+                baseTex.rgb = lerp(baseTex.rgb, baseTex.rgb * _WetDarkenColor.rgb, clothWet * _WetDarken);
 
                 float alpha = baseTex.a * _Alpha;
                 alpha = saturate(min(max(isFacing, _DoubleSided), alpha));
@@ -280,6 +357,8 @@ Shader "Custom/EndfieldHybrid"
 
                 float3 normalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, input.uv));
                 normalTS = normalize(lerp(float3(0, 0, 1), normalTS, _NormalStrength));
+                normalTS.xy += float2(ddx(rainMask), ddy(rainMask)) * _WetNormalStrength * 1.35;
+                normalTS = normalize(normalTS);
                 float3x3 tbn = float3x3(normalize(input.tangentWS), normalize(input.bitangentWS), normalize(input.normalWS));
                 float3 N = normalize(mul(normalTS, tbn));
                 float3 V = SafeNormalize(GetWorldSpaceViewDir(input.positionWS));
@@ -306,7 +385,8 @@ Shader "Custom/EndfieldHybrid"
                 SurfaceData surfaceData = (SurfaceData)0;
                 surfaceData.albedo = baseTex.rgb;
                 surfaceData.metallic = saturate(paramTex.r * _MetallicScale);
-                surfaceData.smoothness = saturate(lerp(_SmoothnessMin, _SmoothnessMax, 1.0 - paramTex.g) * _SmoothnessScale);
+                float baseSmoothness = saturate(lerp(_SmoothnessMin, _SmoothnessMax, 1.0 - paramTex.g) * _SmoothnessScale);
+                surfaceData.smoothness = saturate(baseSmoothness + glossWet * _WetSmoothnessBoost);
                 surfaceData.occlusion = lerp(1.0, saturate(paramTex.b), _OcclusionStrength);
                 surfaceData.normalTS = normalTS;
                 surfaceData.alpha = alpha;
@@ -353,6 +433,8 @@ Shader "Custom/EndfieldHybrid"
                 float2 specUV = float2(NoH, saturate(paramTex.a));
                 float3 specRamp = SAMPLE_TEXTURE2D(_SpecRampTex, sampler_SpecRampTex, specUV).rgb;
                 color += specRamp * maskTex.r * _SpecRampStrength * pow(NoH, 32.0) * saturate(NoL + 0.2);
+                color += specRamp * (rainMask + glossWet * 0.35) * _WetSpecBoost * pow(NoH, 48.0) * saturate(NoL + 0.25);
+                color += rainMask * _WetDropletVisibility * lerp(0.25, 0.85, NoV) * saturate(NoL + 0.35);
 
                 float3 T = normalize(input.tangentWS);
                 float hairSinTH = sqrt(saturate(1.0 - dot(T, H) * dot(T, H)));

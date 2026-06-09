@@ -7,6 +7,14 @@ public static class ZhuangfyMaterialSetup
     private const string MatRoot = Root + "/Materials";
     private const string TexRoot = Root + "/textures";
     private const string OtherTexRoot = Root + "/other_tex";
+    private static readonly int WetPreviewTimeId = Shader.PropertyToID("_ZhuangfyWetPreviewTime");
+    private static readonly double WetPreviewStartTime = EditorApplication.timeSinceStartup;
+
+    static ZhuangfyMaterialSetup()
+    {
+        EditorApplication.update -= UpdateRainPreviewTime;
+        EditorApplication.update += UpdateRainPreviewTime;
+    }
 
     [MenuItem("Tools/Zhuangfy/Assign Endfield Hybrid Materials")]
     public static void AssignHybridMaterials()
@@ -25,6 +33,7 @@ public static class ZhuangfyMaterialSetup
         ConfigureSkin(shader);
         ConfigureCloth(shader);
         ConfigureEmotion(shader);
+        DisableRainPreview();
         DisableOutlines();
 
         AssetDatabase.SaveAssets();
@@ -76,6 +85,30 @@ public static class ZhuangfyMaterialSetup
 
     [MenuItem("Tools/Zhuangfy/Fix Texture Import Settings")]
     public static void FixTextureImportSettingsMenu() => ApplyTextureImportSettings(true);
+
+    [MenuItem("Tools/Zhuangfy/Rain Preview/Enable")]
+    public static void EnableRainPreviewMenu()
+    {
+        SetRainPreview(true, false);
+        AssetDatabase.SaveAssets();
+        Debug.Log("Zhuangfy rain preview enabled.");
+    }
+
+    [MenuItem("Tools/Zhuangfy/Rain Preview/Enable Strong")]
+    public static void EnableStrongRainPreviewMenu()
+    {
+        SetRainPreview(true, true);
+        AssetDatabase.SaveAssets();
+        Debug.Log("Zhuangfy strong rain preview enabled.");
+    }
+
+    [MenuItem("Tools/Zhuangfy/Rain Preview/Disable")]
+    public static void DisableRainPreviewMenu()
+    {
+        SetRainPreview(false, false);
+        AssetDatabase.SaveAssets();
+        Debug.Log("Zhuangfy rain preview disabled.");
+    }
 
     [MenuItem("Tools/Zhuangfy/Debug/Disable Outlines")]
     public static void DisableOutlinesMenu()
@@ -200,6 +233,7 @@ public static class ZhuangfyMaterialSetup
             mat.SetVector("_FaceForwardOS", new Vector4(0, 0, 1, 0));
             mat.SetVector("_FaceRightOS", new Vector4(1, 0, 0, 0));
             mat.SetFloat("_HighlightStrength", 0.12f);
+            SetWetness(mat, 0.0f, 0.0f, 0.08f, 0.08f, 0.06f, 0.05f, 0.08f, 24.0f, 0.45f, 0.15f, 0.06f, 0.08f);
             mat.SetFloat("_DebugMode", 0.0f);
             mat.SetFloat("_DebugExposure", 1.0f);
             mat.SetFloat("_OutlineWidth", 0.0008f);
@@ -216,6 +250,7 @@ public static class ZhuangfyMaterialSetup
             eyeShadow.SetFloat("_PBRBaseBlend", 0.0f);
             eyeShadow.SetFloat("_NPRLightWrap", 1.0f);
             eyeShadow.SetFloat("_NPRLitBoost", 1.0f);
+            SetWetness(eyeShadow, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
             eyeShadow.SetFloat("_Alpha", 0.35f);
             eyeShadow.SetFloat("_AlphaClip", 0.02f);
             eyeShadow.SetFloat("_DebugMode", 0.0f);
@@ -242,6 +277,7 @@ public static class ZhuangfyMaterialSetup
             mat.SetFloat("_SpecRampStrength", 0.55f);
             mat.SetFloat("_MatCapStrength", 0.25f);
             mat.SetFloat("_HighlightStrength", 0.45f);
+            SetWetness(mat, 0.0f, 0.0f, 0.35f, 0.05f, 0.22f, 0.12f, 0.12f, 28.0f, 0.55f, 0.15f, 0.12f, 0.1f);
             mat.SetFloat("_DebugMode", 0.0f);
             mat.SetFloat("_OutlineAlpha", 0.0f);
         }
@@ -275,6 +311,7 @@ public static class ZhuangfyMaterialSetup
             hair.SetFloat("_SmoothnessScale", 0.85f);
             hair.SetFloat("_ShadowFloor", 0.45f);
             hair.SetColor("_ShadowColor", new Color(0.62f, 0.68f, 0.78f, 1));
+            SetWetness(hair, 0.0f, 0.1f, 0.45f, 0.18f, 0.28f, 0.2f, 0.22f, 42.0f, 0.95f, 0.38f, 0.18f, 0.16f);
             hair.SetFloat("_DebugMode", 0.0f);
             hair.SetFloat("_OutlineWidth", 0.0012f);
         }
@@ -291,6 +328,7 @@ public static class ZhuangfyMaterialSetup
             hairShadow.SetFloat("_NormalStrength", 0.0f);
             hairShadow.SetFloat("_Alpha", 0.28f);
             hairShadow.SetFloat("_AlphaClip", 0.02f);
+            SetWetness(hairShadow, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
             hairShadow.SetFloat("_DebugMode", 0.0f);
             hairShadow.SetFloat("_OutlineAlpha", 0.0f);
         }
@@ -312,6 +350,7 @@ public static class ZhuangfyMaterialSetup
         skin.SetFloat("_MetallicScale", 0.0f);
         skin.SetFloat("_SmoothnessScale", 0.45f);
         skin.SetColor("_ShadowColor", new Color(0.9f, 0.72f, 0.62f, 1));
+        SetWetness(skin, 0.0f, 0.0f, 0.18f, 0.04f, 0.12f, 0.06f, 0.08f, 26.0f, 0.45f, 0.1f, 0.08f, 0.08f);
         skin.SetFloat("_DebugMode", 0.0f);
         skin.SetFloat("_OutlineWidth", 0.0007f);
     }
@@ -344,6 +383,7 @@ public static class ZhuangfyMaterialSetup
             mat.SetFloat("_MatCapStrength", 0.12f);
             mat.SetFloat("_EmissionStrength", 0.12f);
             mat.SetColor("_ShadowColor", new Color(0.72f, 0.72f, 0.78f, 1));
+            SetWetness(mat, 0.0f, 0.85f, 0.62f, 0.38f, 0.38f, 0.32f, 0.22f, 44.0f, 1.55f, 0.1f, 0.18f, 0.22f);
             mat.SetFloat("_DebugMode", 0.0f);
             mat.SetFloat("_OutlineWidth", 0.0014f);
         }
@@ -368,6 +408,7 @@ public static class ZhuangfyMaterialSetup
         mat.SetFloat("_NormalStrength", 0.0f);
         mat.SetFloat("_Alpha", 0.65f);
         mat.SetFloat("_AlphaClip", 0.02f);
+        SetWetness(mat, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
         mat.SetFloat("_DebugMode", 0.0f);
         mat.SetFloat("_OutlineAlpha", 0.0f);
     }
@@ -516,6 +557,99 @@ public static class ZhuangfyMaterialSetup
         Debug.Log($"Zhuangfy face texture debug assigned. Texture={texturePath}, Channel={channel}.");
     }
 
+    private static void SetRainPreview(bool enabled, bool strong)
+    {
+        for (var i = 0; i <= 12; i++)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{MatRoot}/{i}.mat");
+            if (mat == null || !mat.HasProperty("_Wetness")) continue;
+            mat.SetFloat("_Wetness", 0.0f);
+        }
+
+        if (!enabled)
+            return;
+
+        var previewBoost = strong ? 1.35f : 1.0f;
+        var clothWetness = strong ? 1.0f : 0.92f;
+        var clothDropletVisibility = strong ? 0.42f : 0.28f;
+        var clothDropletDensity = strong ? 0.34f : 0.22f;
+        var clothNormalStrength = strong ? 0.36f : 0.26f;
+        var clothSpeed = strong ? 2.8f : 1.85f;
+
+        SetWetness(Mat(0), 0.03f, 0.0f, 0.08f, 0.08f, 0.06f, 0.05f, 0.08f, 24.0f, 0.45f, 0.15f, 0.06f, 0.08f);
+        SetWetness(Mat(1), 0.08f, 0.0f, 0.35f, 0.05f, 0.22f, 0.12f, 0.12f * previewBoost, 28.0f, 0.75f, 0.12f, 0.12f, 0.1f);
+        SetWetness(Mat(2), 0.08f, 0.0f, 0.35f, 0.05f, 0.22f, 0.12f, 0.12f * previewBoost, 28.0f, 0.75f, 0.12f, 0.12f, 0.1f);
+        SetWetness(Mat(3), 0.02f, 0.0f, 0.08f, 0.08f, 0.06f, 0.05f, 0.08f, 24.0f, 0.45f, 0.15f, 0.06f, 0.08f);
+        SetWetness(Mat(4), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        SetWetness(Mat(5), 0.02f, 0.0f, 0.08f, 0.08f, 0.06f, 0.05f, 0.08f, 24.0f, 0.45f, 0.15f, 0.06f, 0.08f);
+        SetWetness(Mat(6), 0.0f, 0.0f, 0.08f, 0.08f, 0.06f, 0.05f, 0.08f, 24.0f, 0.45f, 0.15f, 0.06f, 0.08f);
+        SetWetness(Mat(7), strong ? 0.55f : 0.38f, 0.1f, 0.45f, 0.18f, 0.28f, 0.2f, strong ? 0.32f : 0.22f, 42.0f, strong ? 1.6f : 0.95f, 0.22f, strong ? 0.26f : 0.18f, strong ? 0.24f : 0.16f);
+        SetWetness(Mat(8), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+        SetWetness(Mat(9), 0.1f, 0.0f, 0.18f, 0.04f, 0.12f, 0.06f, 0.08f, 26.0f, 0.45f, 0.1f, 0.08f, 0.08f);
+        SetWetness(Mat(10), clothWetness, 0.9f, 0.78f, 0.42f, 0.45f, 0.38f, clothDropletVisibility, 50.0f, clothSpeed, 0.07f, clothDropletDensity, clothNormalStrength);
+        SetWetness(Mat(11), clothWetness, 0.9f, 0.78f, 0.42f, 0.45f, 0.38f, clothDropletVisibility, 50.0f, clothSpeed, 0.07f, clothDropletDensity, clothNormalStrength);
+        SetWetness(Mat(12), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    private static void DisableRainPreview() => SetRainPreview(false, false);
+
+    private static void UpdateRainPreviewTime()
+    {
+        if (!HasActiveRainPreview())
+        {
+            Shader.SetGlobalFloat(WetPreviewTimeId, 0.0f);
+            return;
+        }
+
+        Shader.SetGlobalFloat(WetPreviewTimeId, (float)(EditorApplication.timeSinceStartup - WetPreviewStartTime));
+        SceneView.RepaintAll();
+    }
+
+    private static bool HasActiveRainPreview()
+    {
+        for (var i = 0; i <= 12; i++)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{MatRoot}/{i}.mat");
+            if (mat != null && mat.HasProperty("_Wetness") && mat.GetFloat("_Wetness") > 0.001f)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void SetWetness(
+        Material mat,
+        float wetness,
+        float clothMask,
+        float glossMask,
+        float darken,
+        float smoothnessBoost,
+        float specBoost,
+        float dropletVisibility,
+        float dropletScale,
+        float dropletSpeed,
+        float streakStrength,
+        float dropletDensity,
+        float normalStrength)
+    {
+        if (mat == null || !mat.HasProperty("_Wetness"))
+            return;
+
+        mat.SetFloat("_Wetness", wetness);
+        mat.SetFloat("_WetClothMask", clothMask);
+        mat.SetFloat("_WetGlossMask", glossMask);
+        mat.SetFloat("_WetDarken", darken);
+        mat.SetColor("_WetDarkenColor", new Color(0.58f, 0.62f, 0.68f, 1.0f));
+        mat.SetFloat("_WetSmoothnessBoost", smoothnessBoost);
+        mat.SetFloat("_WetSpecBoost", specBoost);
+        mat.SetFloat("_WetDropletVisibility", dropletVisibility);
+        mat.SetFloat("_WetNormalStrength", normalStrength);
+        mat.SetFloat("_WetDropletScale", dropletScale);
+        mat.SetFloat("_WetDropletSpeed", dropletSpeed);
+        mat.SetFloat("_WetStreakStrength", streakStrength);
+        mat.SetFloat("_WetDropletDensity", dropletDensity);
+    }
+
     private static void DisableOutlines()
     {
         for (var i = 0; i <= 12; i++)
@@ -537,6 +671,14 @@ public static class ZhuangfyMaterialSetup
         }
 
         mat.shader = shader;
+        return mat;
+    }
+
+    private static Material Mat(int index)
+    {
+        var mat = AssetDatabase.LoadAssetAtPath<Material>($"{MatRoot}/{index}.mat");
+        if (mat == null)
+            Debug.LogWarning($"Missing material: {MatRoot}/{index}.mat");
         return mat;
     }
 
