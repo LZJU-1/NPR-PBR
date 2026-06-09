@@ -16,6 +16,7 @@ Shader "Custom/EndfieldHybrid"
         _HairSpecTex ("Hair Spec Style", 2D) = "black" {}
         _EmissionTex ("Emission Tex", 2D) = "black" {}
         _FlowTex ("Flow Mask", 2D) = "black" {}
+        _FaceColorStabilize ("Face Color Stabilize", Range(0, 1)) = 0
 
         _Wetness ("Rain Wetness", Range(0, 1)) = 0
         _WetClothMask ("Wet Cloth Mask", Range(0, 1)) = 0
@@ -41,6 +42,7 @@ Shader "Custom/EndfieldHybrid"
         _ShadowFloor ("Shadow Floor", Range(0, 1)) = 0.28
         _PBRBaseBlend ("PBR Base Blend", Range(0, 1)) = 1
         _NPRLightWrap ("NPR Light Wrap", Range(0, 1)) = 0.75
+        _NPRNormalShadeStrength ("NPR Normal Shade Strength", Range(0, 1)) = 1
         _NPRLitBoost ("NPR Lit Boost", Range(0, 2)) = 1
         _LutStrength ("LUT Strength", Range(0, 1)) = 0.35
         _LutRow ("LUT Row", Range(0, 1)) = 0.5
@@ -177,7 +179,8 @@ Shader "Custom/EndfieldHybrid"
                 float4 _WetDarkenColor;
                 float _WetSmoothnessBoost, _WetSpecBoost, _WetDropletVisibility, _WetDropletDensity, _WetNormalStrength, _WetDropletScale, _WetDropletSpeed, _WetStreakStrength;
                 float _RampBlend, _RampThreshold, _RampFeather, _StyleRampStrength, _RealtimeShadowStrength, _ShadowFloor;
-                float _PBRBaseBlend, _NPRLightWrap, _NPRLitBoost;
+                float _FaceColorStabilize;
+                float _PBRBaseBlend, _NPRLightWrap, _NPRNormalShadeStrength, _NPRLitBoost;
                 float _LutStrength, _LutRow;
                 float _NormalStrength;
                 float _MetallicScale, _SmoothnessMin, _SmoothnessMax, _SmoothnessScale, _OcclusionStrength;
@@ -402,9 +405,10 @@ Shader "Custom/EndfieldHybrid"
                 float rampU = saturate(smoothstep(_RampThreshold - _RampFeather, _RampThreshold + _RampFeather, halfLambert));
                 rampU = lerp(rampU, styleTex.r, _StyleRampStrength);
                 float3 rampColor = SAMPLE_TEXTURE2D(_RampTex, sampler_RampTex, float2(rampU, 0.5)).rgb;
-                float3 lutBase = SampleLut(baseTex.rgb);
+                float3 lutBase = lerp(SampleLut(baseTex.rgb), baseTex.rgb, _FaceColorStabilize);
                 float wrappedLight = lerp(NoL, halfLambert, _NPRLightWrap);
-                float3 nprLitBase = lutBase * lerp(0.92, 1.08, saturate(wrappedLight)) * _NPRLitBoost;
+                float nprNormalShade = lerp(1.0, lerp(0.92, 1.08, saturate(wrappedLight)), _NPRNormalShadeStrength);
+                float3 nprLitBase = lutBase * nprNormalShade * _NPRLitBoost;
                 float3 rampTone = lutBase * rampColor * _ShadowColor.rgb;
 
                 float sdfRawShadow = ComputeFaceSDFShadow(input.uv, L);
@@ -431,8 +435,10 @@ Shader "Custom/EndfieldHybrid"
                     return float4(saturate(debugColor * _DebugExposure), alpha);
                 }
 
-                float stylizedShadowMask = saturate(max(max(realtimeShadow, rampShadow), sdfShadow * _SDFShadowStrength));
-                float3 litBaseColor = lerp(nprLitBase, pbrColor, _PBRBaseBlend);
+                float stableRampShadow = lerp(rampShadow, 0.0, _FaceColorStabilize);
+                float stylizedShadowMask = saturate(max(max(realtimeShadow, stableRampShadow), sdfShadow * _SDFShadowStrength));
+                float pbrBaseBlend = lerp(_PBRBaseBlend, 0.0, _FaceColorStabilize);
+                float3 litBaseColor = lerp(nprLitBase, pbrColor, pbrBaseBlend);
                 float3 color = lerp(litBaseColor, rampTone, stylizedShadowMask * _RampBlend);
                 color = max(color, lutBase * _ShadowFloor * stylizedShadowMask);
 
@@ -451,7 +457,7 @@ Shader "Custom/EndfieldHybrid"
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
                 float2 matcapUV = normalVS.xy * 0.5 + 0.5;
                 float3 matcap = SAMPLE_TEXTURE2D(_MatCapTex, sampler_MatCapTex, matcapUV).rgb;
-                color += matcap * _MatCapStrength * maskTex.g;
+                color += matcap * _MatCapStrength * (1.0 - _FaceColorStabilize) * maskTex.g;
 
                 float faceHighlight = saturate(highlightMask.r + highlightMask.g * 0.5);
                 color += faceHighlight * _HighlightStrength * lerp(0.4, 1.0, NoL) * baseTex.rgb;

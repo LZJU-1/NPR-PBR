@@ -205,6 +205,14 @@ public static class ZhuangfyMaterialSetup
     [MenuItem("Tools/Zhuangfy/Face SDF/Direction Flip Both -Z/-X")]
     public static void FlipFaceBoth() => SetFaceDirection(new Vector4(0, 0, -1, 0), new Vector4(-1, 0, 0, 0));
 
+    [MenuItem("Tools/Zhuangfy/Face/Fix Lower Face Darkening")]
+    public static void FixLowerFaceDarkeningMenu()
+    {
+        ApplyFaceLowerDarkeningFix();
+        AssetDatabase.SaveAssets();
+        Debug.Log("Zhuangfy lower face darkening fix applied.");
+    }
+
     private static void ConfigureFace(Shader shader)
     {
         foreach (var index in new[] { 0, 3, 5, 6 })
@@ -215,13 +223,17 @@ public static class ZhuangfyMaterialSetup
             mat.SetFloat("_RampBlend", 0.42f);
             mat.SetFloat("_StyleRampStrength", 0.0f);
             mat.SetFloat("_RealtimeShadowStrength", 0.0f);
-            mat.SetFloat("_PBRBaseBlend", 0.08f);
+            mat.SetFloat("_FaceColorStabilize", 1.0f);
+            mat.SetFloat("_PBRBaseBlend", 0.0f);
             mat.SetFloat("_NPRLightWrap", 1.0f);
+            mat.SetFloat("_NPRNormalShadeStrength", 0.0f);
             mat.SetFloat("_NPRLitBoost", 1.08f);
             mat.SetFloat("_LutStrength", 0.35f);
             mat.SetFloat("_NormalStrength", 0.0f);
             mat.SetFloat("_MetallicScale", 0.0f);
             mat.SetFloat("_SmoothnessScale", 0.45f);
+            mat.SetFloat("_SpecRampStrength", 0.0f);
+            mat.SetFloat("_MatCapStrength", 0.0f);
             mat.SetFloat("_ShadowFloor", 0.62f);
             mat.SetFloat("_SDFShadowStrength", index == 0 ? 0.85f : 0.0f);
             mat.SetFloat("_SDFDirectionalRG", 1.0f);
@@ -247,15 +259,58 @@ public static class ZhuangfyMaterialSetup
             eyeShadow.SetFloat("_RampBlend", 0.2f);
             eyeShadow.SetFloat("_StyleRampStrength", 0.0f);
             eyeShadow.SetFloat("_RealtimeShadowStrength", 0.0f);
+            eyeShadow.SetFloat("_FaceColorStabilize", 1.0f);
             eyeShadow.SetFloat("_PBRBaseBlend", 0.0f);
             eyeShadow.SetFloat("_NPRLightWrap", 1.0f);
+            eyeShadow.SetFloat("_NPRNormalShadeStrength", 0.0f);
             eyeShadow.SetFloat("_NPRLitBoost", 1.0f);
+            eyeShadow.SetFloat("_SpecRampStrength", 0.0f);
+            eyeShadow.SetFloat("_MatCapStrength", 0.0f);
             SetWetness(eyeShadow, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 24.0f, 0.0f, 0.0f, 0.0f, 0.0f);
             eyeShadow.SetFloat("_Alpha", 0.35f);
             eyeShadow.SetFloat("_AlphaClip", 0.02f);
             eyeShadow.SetFloat("_DebugMode", 0.0f);
             eyeShadow.SetFloat("_OutlineAlpha", 0.0f);
         }
+    }
+
+    private static void ApplyFaceLowerDarkeningFix()
+    {
+        foreach (var mat in FaceMaterials())
+        {
+            if (mat == null) continue;
+            SetFloatIfExists(mat, "_PBRBaseBlend", 0.0f);
+            SetFloatIfExists(mat, "_NPRNormalShadeStrength", 0.0f);
+            SetFloatIfExists(mat, "_SpecRampStrength", 0.0f);
+            SetFloatIfExists(mat, "_MatCapStrength", 0.0f);
+            SetFloatIfExists(mat, "_FaceColorStabilize", 1.0f);
+        }
+
+        var eyeShadow = Mat(4);
+        if (eyeShadow == null) return;
+        SetFloatIfExists(eyeShadow, "_NPRNormalShadeStrength", 0.0f);
+        SetFloatIfExists(eyeShadow, "_SpecRampStrength", 0.0f);
+        SetFloatIfExists(eyeShadow, "_MatCapStrength", 0.0f);
+        SetFloatIfExists(eyeShadow, "_FaceColorStabilize", 1.0f);
+
+        foreach (var mat in Resources.FindObjectsOfTypeAll<Material>())
+        {
+            if (!IsLoadedZhuangfyFaceMaterial(mat)) continue;
+            SetFloatIfExists(mat, "_PBRBaseBlend", 0.0f);
+            SetFloatIfExists(mat, "_NPRNormalShadeStrength", 0.0f);
+            SetFloatIfExists(mat, "_SpecRampStrength", 0.0f);
+            SetFloatIfExists(mat, "_MatCapStrength", 0.0f);
+            SetFloatIfExists(mat, "_FaceColorStabilize", 1.0f);
+        }
+    }
+
+    private static bool IsLoadedZhuangfyFaceMaterial(Material mat)
+    {
+        if (mat == null || mat.shader == null || mat.shader.name != "Custom/EndfieldHybrid")
+            return false;
+
+        var baseTex = mat.HasProperty("_BaseTex") ? mat.GetTexture("_BaseTex") : null;
+        return baseTex != null && baseTex.name == "T_actor_zhuangfy_face_01_D";
     }
 
     private static void ConfigureEyes(Shader shader)
@@ -694,6 +749,12 @@ public static class ZhuangfyMaterialSetup
         mat.SetTexture(property, tex);
     }
 
+    private static void SetFloatIfExists(Material mat, string property, float value)
+    {
+        if (mat != null && mat.HasProperty(property))
+            mat.SetFloat(property, value);
+    }
+
     private static void ApplyTextureImportSettings(bool verbose)
     {
         var changed = 0;
@@ -702,13 +763,19 @@ public static class ZhuangfyMaterialSetup
         try
         {
             foreach (var path in ColorTexturePaths())
-                changed += ConfigureTextureImporter(path, true, TextureImporterType.Default);
+                changed += ConfigureTextureImporter(path, true, TextureImporterType.Default, true, TextureImporterCompression.Compressed);
 
             foreach (var path in DataTexturePaths())
-                changed += ConfigureTextureImporter(path, false, TextureImporterType.Default);
+                changed += ConfigureTextureImporter(path, false, TextureImporterType.Default, false, TextureImporterCompression.Uncompressed);
+
+            foreach (var path in FaceColorQualityTexturePaths())
+                changed += ConfigureTextureImporter(path, true, TextureImporterType.Default, false, TextureImporterCompression.Uncompressed);
+
+            foreach (var path in FaceDataQualityTexturePaths())
+                changed += ConfigureTextureImporter(path, false, TextureImporterType.Default, false, TextureImporterCompression.Uncompressed);
 
             foreach (var path in NormalTexturePaths())
-                changed += ConfigureTextureImporter(path, false, TextureImporterType.NormalMap);
+                changed += ConfigureTextureImporter(path, false, TextureImporterType.NormalMap, true, TextureImporterCompression.Compressed);
         }
         finally
         {
@@ -722,7 +789,12 @@ public static class ZhuangfyMaterialSetup
             Debug.Log($"Zhuangfy texture import settings checked. Reimported {changed} textures.");
     }
 
-    private static int ConfigureTextureImporter(string path, bool sRgb, TextureImporterType type)
+    private static int ConfigureTextureImporter(
+        string path,
+        bool sRgb,
+        TextureImporterType type,
+        bool mipmapEnabled,
+        TextureImporterCompression compression)
     {
         var importer = AssetImporter.GetAtPath(path) as TextureImporter;
         if (importer == null)
@@ -741,6 +813,18 @@ public static class ZhuangfyMaterialSetup
         if (importer.sRGBTexture != sRgb)
         {
             importer.sRGBTexture = sRgb;
+            changed = true;
+        }
+
+        if (importer.mipmapEnabled != mipmapEnabled)
+        {
+            importer.mipmapEnabled = mipmapEnabled;
+            changed = true;
+        }
+
+        if (importer.textureCompression != compression)
+        {
+            importer.textureCompression = compression;
             changed = true;
         }
 
@@ -776,6 +860,27 @@ public static class ZhuangfyMaterialSetup
             OtherTexRoot + "/T_actor_zhuangfy_face_01_D.png",
             OtherTexRoot + "/T_actor_zhuangfy_hair_01_D.png",
             OtherTexRoot + "/T_actor_zhuangfy_iris_01_D.png"
+        };
+    }
+
+    private static string[] FaceColorQualityTexturePaths()
+    {
+        return new[]
+        {
+            TexRoot + "/T_actor_zhuangfy_face_01_D.png",
+            OtherTexRoot + "/T_actor_zhuangfy_face_01_D.png"
+        };
+    }
+
+    private static string[] FaceDataQualityTexturePaths()
+    {
+        return new[]
+        {
+            OtherTexRoot + "/T_actor_common_female_face_01_ST.png",
+            OtherTexRoot + "/T_actor_common_female_face_01_cm_M.png",
+            OtherTexRoot + "/T_actor_common_female_face_02_SDF.png",
+            OtherTexRoot + "/T_actor_common_face_01_hl_M.png",
+            OtherTexRoot + "/T_actor_common_eyeshadow_01_M.png"
         };
     }
 

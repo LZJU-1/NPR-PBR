@@ -401,6 +401,45 @@ float3 litBaseColor = lerp(nprLitBase, pbrColor, _PBRBaseBlend);
 
 这样脸部亮面不再主要依赖 PBR 的 Shadow Map，SDF 块状阴影仍然保留。
 
+### 庄方宜脸部：修复下半部分异常暗部
+
+发现庄方宜脸部鼻子以下/下巴区域出现类似 Nahida 早期问题的固定暗部。Nahida 当时的 devlog 结论是：通用 MatCap 的下半暗色被脸部朝下法线采样，导致鼻下和下巴像有一层不随 SDF/Shadow Map 正常变化的 AO。
+
+庄方宜的表现不是 base color 问题：`Base Color` debug 很干净，脸部原始贴图也没有青灰色块。真正来源是 shader 光照链路中的 normal-based Ramp 阴影：
+
+```hlsl
+rampU = smoothstep(..., halfLambert);
+rampShadow = 1.0 - rampU;
+```
+
+`halfLambert` 由脸部法线和光照方向计算，低面数/法线插值会生成贴图中不存在的块状明暗。这个现象容易被误判成 MatCap、Mask、贴图压缩或 overlay 污染；这些路径都做过排查，但真正让色块消失的是关闭脸部稳定模式下的普通法线 Ramp 阴影。
+
+最终修复：
+
+- 新增 `_FaceColorStabilize`，作为脸部稳定肤色模式
+- `_FaceColorStabilize=1` 时，normal-based `rampShadow` 置零
+- `_FaceColorStabilize=1` 时，`lutBase` 直接回到 base color，避免 LUT 继续染色
+- 新增 `_NPRNormalShadeStrength`，控制 NPR 亮面底色受法线光照影响的程度
+- 脸部材质设置 `_NPRNormalShadeStrength=0.0`，先完全关闭 normal-based 明暗，避免低面数/法线插值造成块状肤色
+- 脸部材质设置 `_PBRBaseBlend=0.0`，在脸部稳定模式下完全绕开 PBR 环境/法线光照
+- 脸部与眼影材质设置 `_MatCapStrength=0.0`，避免通用 MatCap 参与脸部明暗
+- 放大排查时只有 `Mask RGB` 与青灰块形态接近，因此脸部与眼影额外设置 `_SpecRampStrength=0.0`，避免 `_MaskTex.r` 通过 spec ramp 把块状通道叠到肤色上
+- 修复菜单会同时写入项目材质资产和当前已加载的材质实例，避免 Scene 中 renderer 使用实例化材质时看起来“菜单没有生效”
+
+辅助导入策略：
+
+- 脸部 base color：sRGB 开启，Uncompressed，关闭 mipmap
+- 脸部 ST / CM Mask / SDF / Highlight / EyeShadow 数据贴图：sRGB 关闭，Uncompressed，关闭 mipmap
+- 其它颜色贴图仍保持常规压缩和 mipmap，避免无谓增大资源
+
+脸部暗部现在只保留 SDF 块状阴影与 Ramp 色相，不再使用普通法线 Ramp 阴影。HighlightMask 仍保留，用于角色脸部设计中的白色高光块。
+
+应用方式：
+
+- 完整重分配材质：`Tools -> Zhuangfy -> Assign Endfield Hybrid Materials`
+- 只修复当前脸部材质：`Tools -> Zhuangfy -> Face -> Fix Lower Face Darkening`
+- 重新导入脸部贴图质量：`Tools -> Zhuangfy -> Fix Texture Import Settings`
+
 ### 脸部 SDF：方向与 Nahida 对齐
 
 庄方宜的 `T_actor_common_female_face_02_SDF.png` 不是单通道 SDF。通道检查后判断：
