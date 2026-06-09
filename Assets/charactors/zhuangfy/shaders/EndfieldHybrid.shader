@@ -39,6 +39,7 @@ Shader "Custom/EndfieldHybrid"
         _HighlightStrength ("Highlight Strength", Range(0, 2)) = 0
         _SDFShadowStrength ("SDF Shadow Strength", Range(0, 1)) = 0
         _SDFDirectionalRG ("SDF Directional RG", Range(0, 1)) = 1
+        _SDFSwapRG ("SDF Swap Directional RG", Range(0, 1)) = 1
         _SDFChannel ("SDF Channel 0=R 1=G 2=B 3=A", Range(0, 3)) = 0
         _SDFThreshold ("SDF Threshold", Range(0, 1)) = 0.48
         _SDFSoftness ("SDF Softness", Range(0.001, 0.5)) = 0.08
@@ -160,7 +161,7 @@ Shader "Custom/EndfieldHybrid"
                 float _NormalStrength;
                 float _MetallicScale, _SmoothnessMin, _SmoothnessMax, _SmoothnessScale, _OcclusionStrength;
                 float _SpecRampStrength, _MatCapStrength, _HighlightStrength;
-                float _SDFShadowStrength, _SDFDirectionalRG, _SDFChannel, _SDFThreshold, _SDFSoftness, _SDFBackFade;
+                float _SDFShadowStrength, _SDFDirectionalRG, _SDFSwapRG, _SDFChannel, _SDFThreshold, _SDFSoftness, _SDFBackFade;
                 float4 _SDFShadowColor, _FaceForwardOS, _FaceRightOS;
                 float _HairAnisoStrength, _HairAnisoPower, _HairSpecShift;
                 float4 _EmissionColor;
@@ -245,6 +246,10 @@ Shader "Custom/EndfieldHybrid"
                 float sdfLeft = SelectChannel(SAMPLE_TEXTURE2D(_FaceSDFTex, sampler_FaceSDFTex, float2(1.0 - uv.x, uv.y)), _SDFChannel);
                 sdfRight = lerp(sdfRight, sdfTex.r, _SDFDirectionalRG);
                 sdfLeft = lerp(sdfLeft, sdfTex.g, _SDFDirectionalRG);
+                float swappedRight = sdfLeft;
+                float swappedLeft = sdfRight;
+                sdfRight = lerp(sdfRight, swappedRight, _SDFSwapRG);
+                sdfLeft = lerp(sdfLeft, swappedLeft, _SDFSwapRG);
                 float mixSdf = lerp(sdfRight, sdfLeft, exposeRight);
 
                 float thresholdBias = _SDFThreshold - 0.5;

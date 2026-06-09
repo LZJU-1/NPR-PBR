@@ -154,6 +154,12 @@ public static class ZhuangfyMaterialSetup
     [MenuItem("Tools/Zhuangfy/Face SDF/Use Channel A")]
     public static void UseFaceSDFChannelA() => SetFaceSDFChannel(3);
 
+    [MenuItem("Tools/Zhuangfy/Face SDF/Swap Directional RG On")]
+    public static void SwapFaceSDFDirectionalRGOn() => SetFaceSDFSwapRG(1.0f);
+
+    [MenuItem("Tools/Zhuangfy/Face SDF/Swap Directional RG Off")]
+    public static void SwapFaceSDFDirectionalRGOff() => SetFaceSDFSwapRG(0.0f);
+
     [MenuItem("Tools/Zhuangfy/Face SDF/Direction Default +Z/+X")]
     public static void UseDefaultFaceDirection() => SetFaceDirection(new Vector4(0, 0, 1, 0), new Vector4(1, 0, 0, 0));
 
@@ -183,6 +189,7 @@ public static class ZhuangfyMaterialSetup
             mat.SetFloat("_ShadowFloor", 0.42f);
             mat.SetFloat("_SDFShadowStrength", index == 0 ? 0.85f : 0.0f);
             mat.SetFloat("_SDFDirectionalRG", 1.0f);
+            mat.SetFloat("_SDFSwapRG", 1.0f);
             mat.SetFloat("_SDFChannel", 0.0f);
             mat.SetFloat("_SDFThreshold", 0.5f);
             mat.SetFloat("_SDFSoftness", 0.025f);
@@ -380,6 +387,7 @@ public static class ZhuangfyMaterialSetup
         {
             if (mat == null) continue;
             mat.SetFloat("_SDFDirectionalRG", 0.0f);
+            mat.SetFloat("_SDFSwapRG", 0.0f);
             mat.SetFloat("_SDFChannel", channel);
         }
 
@@ -394,10 +402,23 @@ public static class ZhuangfyMaterialSetup
         {
             if (mat == null) continue;
             mat.SetFloat("_SDFDirectionalRG", 1.0f);
+            mat.SetFloat("_SDFSwapRG", 1.0f);
         }
 
         AssetDatabase.SaveAssets();
         Debug.Log("Zhuangfy face SDF set to directional RG mode.");
+    }
+
+    private static void SetFaceSDFSwapRG(float value)
+    {
+        foreach (var mat in FaceMaterials())
+        {
+            if (mat == null) continue;
+            mat.SetFloat("_SDFSwapRG", value);
+        }
+
+        AssetDatabase.SaveAssets();
+        Debug.Log($"Zhuangfy face SDF directional RG swap set to {value}.");
     }
 
     private static void SetFaceDirection(Vector4 forwardOS, Vector4 rightOS)
