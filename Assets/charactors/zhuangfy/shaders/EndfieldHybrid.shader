@@ -447,6 +447,11 @@ Shader "Custom/EndfieldHybrid"
                 color += specRamp * maskTex.r * _SpecRampStrength * pow(NoH, 32.0) * saturate(NoL + 0.2);
                 color += specRamp * (rainMask + glossWet * 0.35) * _WetSpecBoost * pow(NoH, 48.0) * saturate(NoL + 0.25);
                 color += rainMask * _WetDropletVisibility * lerp(0.25, 0.85, NoV) * saturate(NoL + 0.35);
+                float rainCore = smoothstep(0.28, 0.88, rainMask);
+                float rainEdge = saturate(length(float2(ddx(rainMask), ddy(rainMask))) * 10.0);
+                float rainReflect = pow(saturate(dot(reflect(-L, N), V)), 64.0);
+                float rainGlint = rainCore * (0.35 + rainEdge) * (pow(NoH, 96.0) * 1.4 + rainReflect * 1.15) * saturate(NoL + 0.35);
+                color += rainGlint * _WetDropletVisibility * _WetSpecBoost * float3(1.0, 0.96, 0.88);
 
                 float3 T = normalize(input.tangentWS);
                 float hairSinTH = sqrt(saturate(1.0 - dot(T, H) * dot(T, H)));

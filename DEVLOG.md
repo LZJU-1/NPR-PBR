@@ -598,6 +598,17 @@ float dropletSurfaceMask = saturate(
 
 限制：继续用角色 UV 生成水滴时，水珠会受到 UV 岛缩放和拉伸影响，同一套程序圆形在不同部位可能变成宽椭圆或细长形。若要稳定得到商业级“球状水珠”，应补充专用 droplet height/normal 贴图或 flipbook，再用材质分区 mask 控制哪些皮革/金属/布料区域挂水。
 
+### 雨天预览迭代：水珠高光
+
+参考 Shadertoy/GLSL 风格雨滴的常见做法，真实感不只来自水滴 mask，而是来自 mask 梯度形成的假法线和一个独立的尖锐 glint。当前版本不再改动水滴运动、密度、大小或流向，只在已有 `rainMask` 基础上增加清水高光：
+
+- `rainCore = smoothstep(...)` 提取水滴核心区域
+- `rainEdge = length(ddx/ddy(rainMask))` 让高光更偏向水滴边缘/曲率变化处
+- `pow(NoH, 96)` 和 `reflect(-L, N)` 形成小而亮的镜面 glint
+- 复用 `_WetDropletVisibility` 和 `_WetSpecBoost` 控制强度，不新增材质参数
+
+这个版本只补高光读感，不改变之前较可接受的水珠运动与分布。
+
 后续要提升到更接近商业实机效果，建议补充：
 
 - 专用水珠 normal / 雨痕 mask
