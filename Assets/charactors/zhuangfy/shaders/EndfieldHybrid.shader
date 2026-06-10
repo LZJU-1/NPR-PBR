@@ -210,6 +210,9 @@ Shader "Custom/EndfieldHybrid"
             TEXTURE2D(_EmissionTex); SAMPLER(sampler_EmissionTex);
             TEXTURE2D(_FlowTex); SAMPLER(sampler_FlowTex);
             float _ZhuangfyWetPreviewTime;
+            float _SplitLineOffsetPx;
+            float _SplitLineDirX;
+            float _SplitLineDirY;
 
             Varyings vert(Attributes input)
             {
@@ -329,6 +332,18 @@ Shader "Custom/EndfieldHybrid"
                 return 1.0 - sdfLit;
             }
 
+            float SplitNprSide(float4 positionCS)
+            {
+                float2 dir = float2(_SplitLineDirX, _SplitLineDirY);
+                float enabled = step(0.0001, dot(dir, dir));
+                float2 screenUV = GetNormalizedScreenSpaceUV(positionCS);
+                float2 pixelPos = screenUV * _ScreenParams.xy;
+                pixelPos.y = _ScreenParams.y - pixelPos.y;
+                float2 perp = float2(-dir.y, dir.x);
+                float splitSide = dot(pixelPos - _ScreenParams.xy * 0.5, perp) - _SplitLineOffsetPx;
+                return enabled * step(0.0, splitSide);
+            }
+
             float4 frag(Varyings input, bool isFacing : SV_IsFrontFace) : SV_Target
             {
                 float4 baseTex = SAMPLE_TEXTURE2D(_BaseTex, sampler_BaseTex, input.uv) * _BaseColor;
@@ -439,39 +454,48 @@ Shader "Custom/EndfieldHybrid"
                 float stylizedShadowMask = saturate(max(max(realtimeShadow, stableRampShadow), sdfShadow * _SDFShadowStrength));
                 float pbrBaseBlend = lerp(_PBRBaseBlend, 0.0, _FaceColorStabilize);
                 float3 litBaseColor = lerp(nprLitBase, pbrColor, pbrBaseBlend);
-                float3 color = lerp(litBaseColor, rampTone, stylizedShadowMask * _RampBlend);
-                color = max(color, lutBase * _ShadowFloor * stylizedShadowMask);
+                float3 hybridColor = lerp(litBaseColor, rampTone, stylizedShadowMask * _RampBlend);
+                hybridColor = max(hybridColor, lutBase * _ShadowFloor * stylizedShadowMask);
+
+                float nprShadowMask = saturate(max(stableRampShadow, sdfShadow * _SDFShadowStrength));
+                float3 pureNprColor = lerp(nprLitBase, rampTone, nprShadowMask * _RampBlend);
+                pureNprColor = max(pureNprColor, lutBase * _ShadowFloor * nprShadowMask);
 
                 float2 specUV = float2(NoH, saturate(paramTex.a));
                 float3 specRamp = SAMPLE_TEXTURE2D(_SpecRampTex, sampler_SpecRampTex, specUV).rgb;
-                color += specRamp * maskTex.r * _SpecRampStrength * pow(NoH, 32.0) * saturate(NoL + 0.2);
-                color += specRamp * (rainMask + glossWet * 0.35) * _WetSpecBoost * pow(NoH, 48.0) * saturate(NoL + 0.25);
-                color += rainMask * _WetDropletVisibility * lerp(0.25, 0.85, NoV) * saturate(NoL + 0.35);
+                hybridColor += specRamp * maskTex.r * _SpecRampStrength * pow(NoH, 32.0) * saturate(NoL + 0.2);
+                hybridColor += specRamp * (rainMask + glossWet * 0.35) * _WetSpecBoost * pow(NoH, 48.0) * saturate(NoL + 0.25);
+                hybridColor += rainMask * _WetDropletVisibility * lerp(0.25, 0.85, NoV) * saturate(NoL + 0.35);
                 float rainCore = smoothstep(0.28, 0.88, rainMask);
                 float rainEdge = saturate(length(float2(ddx(rainMask), ddy(rainMask))) * 10.0);
                 float rainReflect = pow(saturate(dot(reflect(-L, N), V)), 64.0);
                 float rainGlint = rainCore * (0.35 + rainEdge) * (pow(NoH, 96.0) * 1.4 + rainReflect * 1.15) * saturate(NoL + 0.35);
-                color += rainGlint * _WetDropletVisibility * _WetSpecBoost * float3(1.0, 0.96, 0.88);
+                hybridColor += rainGlint * _WetDropletVisibility * _WetSpecBoost * float3(1.0, 0.96, 0.88);
 
                 float3 T = normalize(input.tangentWS);
                 float hairSinTH = sqrt(saturate(1.0 - dot(T, H) * dot(T, H)));
                 float hairSpec = pow(saturate(hairSinTH + _HairSpecShift), _HairAnisoPower);
                 float hairMask = saturate(hairSpecStyle.r + hairSpecStyle.g * 0.5 + maskTex.r * 0.25);
-                color += hairSpec * hairMask * specRamp * baseTex.rgb * _HairAnisoStrength * saturate(NoL + 0.35);
+                hybridColor += hairSpec * hairMask * specRamp * baseTex.rgb * _HairAnisoStrength * saturate(NoL + 0.35);
 
                 float3 normalVS = normalize(mul((float3x3)UNITY_MATRIX_V, N));
                 float2 matcapUV = normalVS.xy * 0.5 + 0.5;
                 float3 matcap = SAMPLE_TEXTURE2D(_MatCapTex, sampler_MatCapTex, matcapUV).rgb;
-                color += matcap * _MatCapStrength * (1.0 - _FaceColorStabilize) * maskTex.g;
+                hybridColor += matcap * _MatCapStrength * (1.0 - _FaceColorStabilize) * maskTex.g;
 
                 float faceHighlight = saturate(highlightMask.r + highlightMask.g * 0.5);
-                color += faceHighlight * _HighlightStrength * lerp(0.4, 1.0, NoL) * baseTex.rgb;
+                float3 stylizedAdd = faceHighlight * _HighlightStrength * lerp(0.4, 1.0, NoL) * baseTex.rgb;
 
                 float emissionMask = saturate(emissionTex.a + emissionTex.r + flowTex.r * 0.35);
-                color += emissionTex.rgb * _EmissionColor.rgb * emissionMask * _EmissionStrength;
+                stylizedAdd += emissionTex.rgb * _EmissionColor.rgb * emissionMask * _EmissionStrength;
 
                 float rim = pow(1.0 - NoV, _RimPower) * _RimIntensity;
-                color += rim * _RimColor.rgb;
+                stylizedAdd += rim * _RimColor.rgb;
+
+                hybridColor += stylizedAdd;
+                pureNprColor += stylizedAdd;
+
+                float3 color = lerp(hybridColor, pureNprColor, SplitNprSide(input.positionCS));
                 color = MixFog(color, input.fogCoord);
                 return float4(color, alpha);
             }

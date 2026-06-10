@@ -615,3 +615,21 @@ float dropletSurfaceMask = saturate(
 - cloth / leather / metal 材质分区 mask
 - 世界空间或重力方向的 flow 计算，减少 UV 岛断裂
 - 与场景天气参数联动的全局 `_Wetness`
+
+### 庄方宜 Split Preview：纯 NPR / Hybrid 对照
+
+目标：和 Nahida 之前的分割线预览统一，让同一个角色画面中一边显示纯 NPR，另一边显示当前 Endfield Hybrid。这样可以直接对比“Ramp/SDF 控制色相与肤色”和“PBR 负责高光、法线、金属、水珠质感”的差异。
+
+实现方式：
+
+- 复用 `SplitScreenController` 写入的全局参数 `_SplitLineDirX/Y`、`_SplitLineOffsetPx`
+- `Custom/EndfieldHybrid` 默认不分屏；只有检测到分割线方向向量非零时才启用分屏
+- Hybrid 侧保留当前完整路径：`UniversalFragmentPBR`、实时阴影、Spec Ramp、头发各向异性、MatCap、雨滴高光等
+- 纯 NPR 侧不使用 `pbrColor`，也不使用实时 Shadow Map；暗部只来自 Ramp 与 Face SDF
+- 两侧共同保留脸部高光、emission、rim，避免比较时表情/发光/轮廓感突然消失
+
+新增菜单：
+
+- `Tools/Zhuangfy/Split Preview/Enable Controller`
+
+这个菜单只负责把已有的 `SplitScreenController` 挂到相机上并重置分割线参数。它会造成场景 dirty，但不要求提交场景文件；核心提交仍然只需要 shader、脚本和 devlog。

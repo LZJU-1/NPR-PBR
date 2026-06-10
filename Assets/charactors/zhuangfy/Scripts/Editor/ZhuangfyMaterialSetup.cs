@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 public static class ZhuangfyMaterialSetup
@@ -108,6 +109,31 @@ public static class ZhuangfyMaterialSetup
         SetRainPreview(false, false);
         AssetDatabase.SaveAssets();
         Debug.Log("Zhuangfy rain preview disabled.");
+    }
+
+    [MenuItem("Tools/Zhuangfy/Split Preview/Enable Controller")]
+    public static void EnableSplitPreviewController()
+    {
+        var controller = Object.FindFirstObjectByType<SplitScreenController>();
+        if (controller == null)
+        {
+            var camera = Camera.main != null ? Camera.main : Object.FindFirstObjectByType<Camera>();
+            if (camera == null)
+            {
+                Debug.LogWarning("No camera found for Zhuangfy split preview.");
+                return;
+            }
+
+            controller = camera.gameObject.AddComponent<SplitScreenController>();
+        }
+
+        controller.lineColor = Color.white;
+        controller.lineThickness = 3.0f;
+        controller.lineOffset = 0.0f;
+        controller.lineAngle = 0.0f;
+        EditorUtility.SetDirty(controller);
+        EditorSceneManager.MarkSceneDirty(controller.gameObject.scene);
+        Debug.Log("Zhuangfy split preview controller enabled. Left drag rotates, right drag pans, R resets.");
     }
 
     [MenuItem("Tools/Zhuangfy/Debug/Disable Outlines")]
