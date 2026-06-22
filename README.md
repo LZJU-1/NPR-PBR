@@ -6,35 +6,35 @@ Unity URP character rendering project focused on anime-style NPR and Hybrid shad
 
 ### NPR
 
-<video src="docs/media/01-npr.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/01-npr.gif" alt="NPR" width="420">
 
 ### NPR Shadow
 
-<video src="docs/media/02-npr-shadow.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/02-npr-shadow.gif" alt="NPR Shadow" width="420">
 
 ### Hybrid
 
-<video src="docs/media/03-hybrid.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/03-hybrid.gif" alt="Hybrid" width="420">
 
 ### Hybrid Shadow
 
-<video src="docs/media/04-hybrid-shadow.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/04-hybrid-shadow.gif" alt="Hybrid Shadow" width="420">
 
 ### Rain Preview I
 
-<video src="docs/media/05-rain-1.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/05-rain-1.gif" alt="Rain Preview I" width="420">
 
 ### Rain Preview II
 
-<video src="docs/media/06-rain-2.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/06-rain-2.gif" alt="Rain Preview II" width="420">
 
 ### Rain Toggle
 
-<video src="docs/media/07-rain-open-and-close.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/07-rain-open-and-close.gif" alt="Rain Toggle" width="420">
 
 ### Style Switching
 
-<video src="docs/media/08-change-style.mp4" controls muted loop playsinline width="520"></video>
+<img src="docs/media/08-change-style.gif" alt="Style Switching" width="420">
 
 ## Overview
 
