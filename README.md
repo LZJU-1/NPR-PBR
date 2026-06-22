@@ -6,35 +6,35 @@ Unity URP character rendering project focused on anime-style NPR and Hybrid shad
 
 ### NPR
 
-<video src="docs/media/01-npr.mov" controls muted loop playsinline width="100%"></video>
+![NPR](docs/media/01-npr.gif)
 
 ### NPR Shadow
 
-<video src="docs/media/02-npr-shadow.mov" controls muted loop playsinline width="100%"></video>
+![NPR Shadow](docs/media/02-npr-shadow.gif)
 
 ### Hybrid
 
-<video src="docs/media/03-hybrid.mov" controls muted loop playsinline width="100%"></video>
+![Hybrid](docs/media/03-hybrid.gif)
 
 ### Hybrid Shadow
 
-<video src="docs/media/04-hybrid-shadow.mov" controls muted loop playsinline width="100%"></video>
+![Hybrid Shadow](docs/media/04-hybrid-shadow.gif)
 
 ### Rain Preview I
 
-<video src="docs/media/05-rain-1.mov" controls muted loop playsinline width="100%"></video>
+![Rain Preview I](docs/media/05-rain-1.gif)
 
 ### Rain Preview II
 
-<video src="docs/media/06-rain-2.mov" controls muted loop playsinline width="100%"></video>
+![Rain Preview II](docs/media/06-rain-2.gif)
 
 ### Rain Toggle
 
-<video src="docs/media/07-rain-open-and-close.mov" controls muted loop playsinline width="100%"></video>
+![Rain Toggle](docs/media/07-rain-open-and-close.gif)
 
 ### Style Switching
 
-<video src="docs/media/08-change-style.mov" controls muted loop playsinline width="100%"></video>
+![Style Switching](docs/media/08-change-style.gif)
 
 ## Overview
 
